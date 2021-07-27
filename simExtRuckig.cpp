@@ -4,9 +4,8 @@
 #include <boost/lexical_cast.hpp>
 #include <vector>
 
-// Following required by the Reflexxes Motion Library:
+// Following required by Ruckig:
 #include <ruckig/ruckig.hpp>
-
 using namespace ruckig;
 
 #ifdef _WIN32
@@ -174,7 +173,7 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 
 //		if (file!=NULL)
 //			IP->Echo(file);
-		// Execute the Reflexxe function!
+		// Execute the Ruckig function!
 		replyData[0]=ruckig.update(input, output);
 //		printf("ret: %i, sync. time: %f, alphaTime: %f\n",replyData[0],(float)OP->SynchronizationTime,(float)OP->AlphaTime);
 
@@ -262,7 +261,7 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		unsigned char extensionBytes=data[off];
 		off+=1+extensionBytes;
 
-		// Execute the Reflexxe function!
+		// Execute the Ruckig function!
 		replyData[0]=ruckig.update(input,output);
 
 		// Next to returning the function return value (just here above), we return a buffer with the new position, velocity and acceleration vector:
