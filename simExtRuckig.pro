@@ -66,9 +66,21 @@ HEADERS += \
     ../include/simLib.h \
     simExtRML2.h \
     ruckig/include/ruckig/block.hpp \
+    ruckig/include/ruckig/brake.hpp \
+    ruckig/include/ruckig/input_parameter.hpp \
+    ruckig/include/ruckig/output_parameter.hpp \
+    ruckig/include/ruckig/position.hpp \
+    ruckig/include/ruckig/profile.hpp \
+    ruckig/include/ruckig/roots.hpp \
+    ruckig/include/ruckig/ruckig.hpp \
+    ruckig/include/ruckig/trajectory.hpp \
+    ruckig/include/ruckig/velocity.hpp
 
 SOURCES += \
     ../common/simLib.cpp \
     simExtRML2.cpp \
     ruckig/src/brake.cpp \
-
+    ruckig/src/position-step1.cpp \
+    ruckig/src/position-step2.cpp \
+    ruckig/src/velocity-step1.cpp \
+    ruckig/src/velocity-step2.cpp
