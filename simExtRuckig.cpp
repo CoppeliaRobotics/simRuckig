@@ -1,14 +1,12 @@
-#include "simExtRML2.h"
+#include "simExtRuckig.h"
 #include "simLib.h"
 #include <iostream>
 #include <boost/lexical_cast.hpp>
 #include <vector>
 
-// Following required by the Reflexxes Motion Library:
-#include <ReflexxesAPI.h>
-#include <RMLPositionFlags.h>
-#include <RMLPositionInputParameters.h>
-#include <RMLPositionOutputParameters.h>
+// Following required by Ruckig:
+#include <ruckig/ruckig.hpp>
+using namespace ruckig;
 
 #ifdef _WIN32
 	#include <shlwapi.h>
@@ -19,14 +17,9 @@
 
 struct SObj
 {
-	ReflexxesAPI* RML;
-	RMLPositionInputParameters* PIP;
-	RMLPositionOutputParameters* POP;
-	RMLPositionFlags* PFlags;
-
-	RMLVelocityInputParameters* VIP;
-	RMLVelocityOutputParameters* VOP;
-	RMLVelocityFlags* VFlags;
+	Ruckig<0> *ruckig;
+	InputParameter<0> *input;
+	OutputParameter<0> *output;
 
 	bool destroyAtSimulationEnd;
 	int objectHandle;
@@ -65,12 +58,12 @@ SIM_DLLEXPORT unsigned char simStart(void* reservedPointer,int reservedInt)
 	simLib=loadSimLibrary(temp.c_str());
 	if (simLib==NULL)
 	{
-        printf("simExtRML2: error: could not find or correctly load the CoppeliaSim library. Cannot start the plugin.\n"); // cannot use simAddLog here.
+        printf("simExtRuckig: error: could not find or correctly load the CoppeliaSim library. Cannot start the plugin.\n"); // cannot use simAddLog here.
         return(0); // Means error, CoppeliaSim will unload this plugin
 	}
 	if (getSimProcAddresses(simLib)==0)
 	{
-        printf("simExtRML2: error: could not find all required functions in the CoppeliaSim library. Cannot start the plugin.\n"); // cannot use simAddLog here.
+        printf("simExtRuckig: error: could not find all required functions in the CoppeliaSim library. Cannot start the plugin.\n"); // cannot use simAddLog here.
 		unloadSimLibrary(simLib);
         return(0); // Means error, CoppeliaSim will unload this plugin
 	}
@@ -102,11 +95,6 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 
 	if ((message==sim_message_eventcallback_rmlposition))//&&(auxiliaryData[0]!=0)) // if auxiliaryData[0] isn't 0, then we wanna use the type 4 lib!
 	{ // the sim_message_eventcallback_rmlposition message is passed when the API function simRMLPosition is called from C/C++ or Lua
-		ReflexxesAPI* RML=NULL;
-		RMLPositionInputParameters* IP=NULL;
-		RMLPositionOutputParameters* OP=NULL;
-		RMLPositionFlags Flags;
-
 		// All input parameters are coded in the data buffer! (i.e. first 4 bytes=DoFs, next 8 bytes=time step, etc.)
 		// The values in the data buffer are in meters, not millimeters!
 		char* data=(char*)customData;
@@ -114,39 +102,39 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		double timeStep=((double*)(data+4))[0];
 		int off=12;
 
-		RML = new ReflexxesAPI(dofs,timeStep);
-		IP = new RMLPositionInputParameters(dofs);
-		OP = new RMLPositionOutputParameters(dofs);
+		Ruckig<0> ruckig {(size_t)dofs, timeStep};
+		InputParameter<0> input {(size_t)dofs};
+		OutputParameter<0> output {(size_t)dofs};
 
 		for (int i=0;i<dofs;i++)
-			IP->CurrentPositionVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			input.current_position[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			IP->CurrentVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			input.current_velocity[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			IP->CurrentAccelerationVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-
-		for (int i=0;i<dofs;i++)
-			IP->MaxVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-		for (int i=0;i<dofs;i++)
-			IP->MaxAccelerationVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-		for (int i=0;i<dofs;i++)
-			IP->MaxJerkVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			input.current_acceleration[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 
 		for (int i=0;i<dofs;i++)
-			IP->SelectionVector->VecData[i]=(data[off+i]!=0);
+			input.max_velocity[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+		for (int i=0;i<dofs;i++)
+			input.max_acceleration[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+		for (int i=0;i<dofs;i++)
+			input.max_jerk[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+
+		for (int i=0;i<dofs;i++)
+			input.enabled[i]=(data[off+i]!=0);
 		off+=dofs;
 
 		for (int i=0;i<dofs;i++)
-			IP->TargetPositionVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			input.target_position[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			IP->TargetVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			input.target_velocity[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 
 		// Apply the flags:
@@ -154,28 +142,28 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		if (flags>=0)
 		{ // we don't have default values!
 			if ((flags&3)==simrml_phase_sync_if_possible)
-				Flags.SynchronizationBehavior=RMLFlags::PHASE_SYNCHRONIZATION_IF_POSSIBLE; // default
+				input.synchronization=Synchronization::Phase; // default
 			if ((flags&3)==simrml_only_time_sync)
-				Flags.SynchronizationBehavior=RMLFlags::ONLY_TIME_SYNCHRONIZATION;
+				input.synchronization=Synchronization::Time;
 			if ((flags&3)==simrml_only_phase_sync)
-				Flags.SynchronizationBehavior=RMLFlags::ONLY_PHASE_SYNCHRONIZATION;
+				input.synchronization=Synchronization::Phase;
 			if ((flags&3)==simrml_no_sync)
-				Flags.SynchronizationBehavior=RMLFlags::NO_SYNCHRONIZATION;
+				input.synchronization=Synchronization::None;
 
-			if ((flags&4)==simrml_keep_target_vel)
-				Flags.BehaviorAfterFinalStateOfMotionIsReached=RMLPositionFlags::KEEP_TARGET_VELOCITY; // default
-			if ((flags&4)==simrml_recompute_trajectory)
-				Flags.BehaviorAfterFinalStateOfMotionIsReached=RMLPositionFlags::RECOMPUTE_TRAJECTORY;
+			// if ((flags&4)==simrml_keep_target_vel)
+			// 	Flags.BehaviorAfterFinalStateOfMotionIsReached=RMLPositionFlags::KEEP_TARGET_VELOCITY; // default
+			// if ((flags&4)==simrml_recompute_trajectory)
+			// 	Flags.BehaviorAfterFinalStateOfMotionIsReached=RMLPositionFlags::RECOMPUTE_TRAJECTORY;
 
-			if (flags&simrml_disable_extremum_motion_states_calc)
-				Flags.EnableTheCalculationOfTheExtremumMotionStates=false;
-			else
-				Flags.EnableTheCalculationOfTheExtremumMotionStates=true; // default
+			// if (flags&simrml_disable_extremum_motion_states_calc)
+			// 	Flags.EnableTheCalculationOfTheExtremumMotionStates=false;
+			// else
+			// 	Flags.EnableTheCalculationOfTheExtremumMotionStates=true; // default
 
-			if (flags&simrml_keep_current_vel_if_fallback_strategy)
-				Flags.KeepCurrentVelocityInCaseOfFallbackStrategy=true;
-			else
-				Flags.KeepCurrentVelocityInCaseOfFallbackStrategy=false; // default
+			// if (flags&simrml_keep_current_vel_if_fallback_strategy)
+			// 	Flags.KeepCurrentVelocityInCaseOfFallbackStrategy=true;
+			// else
+			// 	Flags.KeepCurrentVelocityInCaseOfFallbackStrategy=false; // default
 		}
 		off+=4;
 
@@ -185,8 +173,8 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 
 //		if (file!=NULL)
 //			IP->Echo(file);
-		// Execute the Reflexxe function!
-		replyData[0]=RML->RMLPosition(*IP,OP,Flags);
+		// Execute the Ruckig function!
+		replyData[0]=ruckig.update(input, output);
 //		printf("ret: %i, sync. time: %f, alphaTime: %f\n",replyData[0],(float)OP->SynchronizationTime,(float)OP->AlphaTime);
 
 		// Next to returning the function return value (just here above), we return a buffer with the new position, velocity and acceleration vector:
@@ -195,33 +183,24 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		off=0;
 
 		for (int i=0;i<dofs;i++)
-			((double*)(retBuff+off))[i]=OP->NewPositionVector->VecData[i]/1000.0;
+			((double*)(retBuff+off))[i]=output.new_position[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			((double*)(retBuff+off))[i]=OP->NewVelocityVector->VecData[i]/1000.0;
+			((double*)(retBuff+off))[i]=output.new_velocity[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			((double*)(retBuff+off))[i]=OP->NewAccelerationVector->VecData[i]/1000.0;
+			((double*)(retBuff+off))[i]=output.new_acceleration[i];
 		off+=dofs*8;
 
-		((double*)(retBuff+off))[0]=OP->SynchronizationTime;
+		((double*)(retBuff+off))[0]=output.trajectory.get_duration();
 //		((double*)(retBuff+off))[1]=OP->AlphaTime;
 		off+=8*8;
 
 		retVal=retBuff;
-
-		delete RML;
-		delete IP;
-		delete OP;
 	}
 
 	if ((message==sim_message_eventcallback_rmlvelocity))//&&(auxiliaryData[0]!=0)) // if auxiliaryData[0] isn't 0, then we wanna use the type 4 lib!
 	{ // the sim_message_eventcallback_rmlvelocity message is passed when the API function simRMLVelocity is called from C/C++ or Lua
-		ReflexxesAPI* RML=NULL;
-		RMLVelocityInputParameters* IP=NULL;
-		RMLVelocityOutputParameters* OP=NULL;
-		RMLVelocityFlags Flags;
-
 		// All input parameters are coded in the data buffer! (i.e. first 4 bytes=DoFs, next 8 bytes=time step, etc.)
 		// The values in the data buffer are in meters, not millimeters!
 		char* data=(char*)customData;
@@ -229,33 +208,33 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		double timeStep=((double*)(data+4))[0];
 		int off=12;
 
-		RML = new ReflexxesAPI(dofs,timeStep);
-		IP = new RMLVelocityInputParameters(dofs);
-		OP = new RMLVelocityOutputParameters(dofs);
+		Ruckig<0> ruckig {(size_t)dofs,timeStep};
+		InputParameter<0> input {(size_t)dofs};
+		OutputParameter<0> output {(size_t)dofs};
 
 		for (int i=0;i<dofs;i++)
-			IP->CurrentPositionVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			input.current_position[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			IP->CurrentVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			input.current_velocity[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			IP->CurrentAccelerationVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-
-		for (int i=0;i<dofs;i++)
-			IP->MaxAccelerationVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-		for (int i=0;i<dofs;i++)
-			IP->MaxJerkVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			input.current_acceleration[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 
 		for (int i=0;i<dofs;i++)
-			IP->SelectionVector->VecData[i]=(data[off+i]!=0);
+			input.max_acceleration[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+		for (int i=0;i<dofs;i++)
+			input.max_jerk[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+
+		for (int i=0;i<dofs;i++)
+			input.enabled[i]=(data[off+i]!=0);
 		off+=dofs;
 
 		for (int i=0;i<dofs;i++)
-			IP->TargetVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			input.target_velocity[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 
 		// Apply the flags:
@@ -263,18 +242,18 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		if (flags>=0)
 		{ // we don't have default values!
 			if ((flags&3)==simrml_phase_sync_if_possible)
-				Flags.SynchronizationBehavior=RMLFlags::PHASE_SYNCHRONIZATION_IF_POSSIBLE;
+				input.synchronization=Synchronization::Phase;
 			if ((flags&3)==simrml_only_time_sync)
-				Flags.SynchronizationBehavior=RMLFlags::ONLY_TIME_SYNCHRONIZATION;
+				input.synchronization=Synchronization::Time;
 			if ((flags&3)==simrml_only_phase_sync)
-				Flags.SynchronizationBehavior=RMLFlags::ONLY_PHASE_SYNCHRONIZATION;
+				input.synchronization=Synchronization::Phase;
 			if ((flags&3)==simrml_no_sync)
-				Flags.SynchronizationBehavior=RMLFlags::NO_SYNCHRONIZATION; // default
+				input.synchronization=Synchronization::None; // default
 
-			if (flags&simrml_disable_extremum_motion_states_calc)
-				Flags.EnableTheCalculationOfTheExtremumMotionStates=false;
-			else
-				Flags.EnableTheCalculationOfTheExtremumMotionStates=true; // default
+			// if (flags&simrml_disable_extremum_motion_states_calc)
+			// 	input.EnableTheCalculationOfTheExtremumMotionStates=false;
+			// else
+			// 	input.EnableTheCalculationOfTheExtremumMotionStates=true; // default
 		}
 		off+=4;
 
@@ -282,8 +261,8 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		unsigned char extensionBytes=data[off];
 		off+=1+extensionBytes;
 
-		// Execute the Reflexxe function!
-		replyData[0]=RML->RMLVelocity(*IP,OP,Flags);
+		// Execute the Ruckig function!
+		replyData[0]=ruckig.update(input,output);
 
 		// Next to returning the function return value (just here above), we return a buffer with the new position, velocity and acceleration vector:
 		// We also return 8 additional doubles for future extension (1 double is already in use)
@@ -291,37 +270,26 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		off=0;
 
 		for (int i=0;i<dofs;i++)
-			((double*)(retBuff+off))[i]=OP->NewPositionVector->VecData[i]/1000.0;
+			((double*)(retBuff+off))[i]=output.new_position[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			((double*)(retBuff+off))[i]=OP->NewVelocityVector->VecData[i]/1000.0;
+			((double*)(retBuff+off))[i]=output.new_velocity[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			((double*)(retBuff+off))[i]=OP->NewAccelerationVector->VecData[i]/1000.0;
+			((double*)(retBuff+off))[i]=output.new_acceleration[i];
 		off+=dofs*8;
 
-		((double*)(retBuff+off))[0]=OP->SynchronizationTime;
+		((double*)(retBuff+off))[0]=output.trajectory.get_duration();
 //		((double*)(retBuff+off))[1]=OP->AlphaTime;
 		off+=8*8;
 
 		retVal=retBuff;
-
-		delete RML;
-		delete IP;
-		delete OP;
 	}
 
 	if (message==sim_message_eventcallback_rmlpos)
 	{ // the sim_message_eventcallback_rmlpos message is passed when the API function simRMLPos is called from C/C++ or Lua
 
 		SObj obj;
-		obj.RML=NULL;
-		obj.PIP=NULL;
-		obj.POP=NULL;
-		obj.PFlags=NULL;
-		obj.VIP=NULL;
-		obj.VOP=NULL;
-		obj.VFlags=NULL;
 		obj.destroyAtSimulationEnd=(auxiliaryData[1]!=0);
 		obj.objectHandle=nextObjectHandle;
 
@@ -334,40 +302,39 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		obj.smallestTimeStep=timeStep;
 		int off=12;
 
-		obj.RML = new ReflexxesAPI(dofs,timeStep);
-		obj.PIP = new RMLPositionInputParameters(dofs);
-		obj.POP = new RMLPositionOutputParameters(dofs);
-		obj.PFlags = new RMLPositionFlags();
+		obj.ruckig = new Ruckig<0>(dofs,timeStep);
+		obj.input = new InputParameter<0>(dofs);
+		obj.output = new OutputParameter<0>(dofs);
 
 		for (int i=0;i<dofs;i++)
-			obj.PIP->CurrentPositionVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			obj.input->current_position[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			obj.PIP->CurrentVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			obj.input->current_velocity[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			obj.PIP->CurrentAccelerationVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-
-		for (int i=0;i<dofs;i++)
-			obj.PIP->MaxVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-		for (int i=0;i<dofs;i++)
-			obj.PIP->MaxAccelerationVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-		for (int i=0;i<dofs;i++)
-			obj.PIP->MaxJerkVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			obj.input->current_acceleration[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 
 		for (int i=0;i<dofs;i++)
-			obj.PIP->SelectionVector->VecData[i]=(data[off+i]!=0);
+			obj.input->max_velocity[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+		for (int i=0;i<dofs;i++)
+			obj.input->max_acceleration[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+		for (int i=0;i<dofs;i++)
+			obj.input->max_jerk[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+
+		for (int i=0;i<dofs;i++)
+			obj.input->enabled[i]=(data[off+i]!=0);
 		off+=dofs;
 
 		for (int i=0;i<dofs;i++)
-			obj.PIP->TargetPositionVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			obj.input->target_position[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			obj.PIP->TargetVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			obj.input->target_velocity[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 
 		// Apply the flags:
@@ -375,28 +342,28 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		if (flags>=0)
 		{ // we don't have default values!
 			if ((flags&3)==simrml_phase_sync_if_possible)
-				obj.PFlags->SynchronizationBehavior=RMLFlags::PHASE_SYNCHRONIZATION_IF_POSSIBLE; // default
+				obj.input->synchronization=Synchronization::Phase; // default
 			if ((flags&3)==simrml_only_time_sync)
-				obj.PFlags->SynchronizationBehavior=RMLFlags::ONLY_TIME_SYNCHRONIZATION;
+				obj.input->synchronization=Synchronization::Time;
 			if ((flags&3)==simrml_only_phase_sync)
-				obj.PFlags->SynchronizationBehavior=RMLFlags::ONLY_PHASE_SYNCHRONIZATION;
+				obj.input->synchronization=Synchronization::Phase;
 			if ((flags&3)==simrml_no_sync)
-				obj.PFlags->SynchronizationBehavior=RMLFlags::NO_SYNCHRONIZATION;
+				obj.input->synchronization=Synchronization::None;
 
-			if ((flags&4)==simrml_keep_target_vel)
-				obj.PFlags->BehaviorAfterFinalStateOfMotionIsReached=RMLPositionFlags::KEEP_TARGET_VELOCITY; // default
-			if ((flags&4)==simrml_recompute_trajectory)
-				obj.PFlags->BehaviorAfterFinalStateOfMotionIsReached=RMLPositionFlags::RECOMPUTE_TRAJECTORY;
+			// if ((flags&4)==simrml_keep_target_vel)
+			// 	obj.PFlags->BehaviorAfterFinalStateOfMotionIsReached=RMLPositionFlags::KEEP_TARGET_VELOCITY; // default
+			// if ((flags&4)==simrml_recompute_trajectory)
+			// 	obj.PFlags->BehaviorAfterFinalStateOfMotionIsReached=RMLPositionFlags::RECOMPUTE_TRAJECTORY;
 
-			if (flags&simrml_disable_extremum_motion_states_calc)
-				obj.PFlags->EnableTheCalculationOfTheExtremumMotionStates=false;
-			else
-				obj.PFlags->EnableTheCalculationOfTheExtremumMotionStates=true; // default
+			// if (flags&simrml_disable_extremum_motion_states_calc)
+			// 	obj.PFlags->EnableTheCalculationOfTheExtremumMotionStates=false;
+			// else
+			// 	obj.PFlags->EnableTheCalculationOfTheExtremumMotionStates=true; // default
 
-			if (flags&simrml_keep_current_vel_if_fallback_strategy)
-				obj.PFlags->KeepCurrentVelocityInCaseOfFallbackStrategy=true;
-			else
-				obj.PFlags->KeepCurrentVelocityInCaseOfFallbackStrategy=false; // default
+			// if (flags&simrml_keep_current_vel_if_fallback_strategy)
+			// 	obj.PFlags->KeepCurrentVelocityInCaseOfFallbackStrategy=true;
+			// else
+			// 	obj.PFlags->KeepCurrentVelocityInCaseOfFallbackStrategy=false; // default
 		}
 		off+=4;
 
@@ -413,13 +380,6 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 	{ // the sim_message_eventcallback_rmlvel message is passed when the API function simRMLVel is called from C/C++ or Lua
 
 		SObj obj;
-		obj.RML=NULL;
-		obj.PIP=NULL;
-		obj.POP=NULL;
-		obj.PFlags=NULL;
-		obj.VIP=NULL;
-		obj.VOP=NULL;
-		obj.VFlags=NULL;
 		obj.destroyAtSimulationEnd=(auxiliaryData[1]!=0);
 		obj.objectHandle=nextObjectHandle;
 
@@ -432,34 +392,33 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		obj.smallestTimeStep=timeStep;
 		int off=12;
 
-		obj.RML = new ReflexxesAPI(dofs,timeStep);
-		obj.VIP = new RMLVelocityInputParameters(dofs);
-		obj.VOP = new RMLVelocityOutputParameters(dofs);
- 		obj.VFlags = new RMLVelocityFlags();
+		obj.ruckig = new Ruckig<0>(dofs, timeStep);
+		obj.input = new InputParameter<0>(dofs);
+		obj.output = new OutputParameter<0>(dofs);
 
 		for (int i=0;i<dofs;i++)
-			obj.VIP->CurrentPositionVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			obj.input->current_position[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			obj.VIP->CurrentVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			obj.input->current_velocity[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 		for (int i=0;i<dofs;i++)
-			obj.VIP->CurrentAccelerationVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-
-		for (int i=0;i<dofs;i++)
-			obj.VIP->MaxAccelerationVector->VecData[i]=((double*)(data+off))[i]*1000.0;
-		off+=dofs*8;
-		for (int i=0;i<dofs;i++)
-			obj.VIP->MaxJerkVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			obj.input->current_acceleration[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 
 		for (int i=0;i<dofs;i++)
-			obj.VIP->SelectionVector->VecData[i]=(data[off+i]!=0);
+			obj.input->max_acceleration[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+		for (int i=0;i<dofs;i++)
+			obj.input->max_jerk[i]=((double*)(data+off))[i];
+		off+=dofs*8;
+
+		for (int i=0;i<dofs;i++)
+			obj.input->enabled[i]=(data[off+i]!=0);
 		off+=dofs;
 
 		for (int i=0;i<dofs;i++)
-			obj.VIP->TargetVelocityVector->VecData[i]=((double*)(data+off))[i]*1000.0;
+			obj.input->target_velocity[i]=((double*)(data+off))[i];
 		off+=dofs*8;
 
 		// Apply the flags:
@@ -467,18 +426,18 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		if (flags>=0)
 		{ // we don't have default values!
 			if ((flags&3)==simrml_phase_sync_if_possible)
-				obj.VFlags->SynchronizationBehavior=RMLFlags::PHASE_SYNCHRONIZATION_IF_POSSIBLE;
+				obj.input->synchronization=Synchronization::Phase;
 			if ((flags&3)==simrml_only_time_sync)
-				obj.VFlags->SynchronizationBehavior=RMLFlags::ONLY_TIME_SYNCHRONIZATION;
+				obj.input->synchronization=Synchronization::Time;
 			if ((flags&3)==simrml_only_phase_sync)
-				obj.VFlags->SynchronizationBehavior=RMLFlags::ONLY_PHASE_SYNCHRONIZATION;
+				obj.input->synchronization=Synchronization::Phase;
 			if ((flags&3)==simrml_no_sync)
-				obj.VFlags->SynchronizationBehavior=RMLFlags::NO_SYNCHRONIZATION; // default
+				obj.input->synchronization=Synchronization::None; // default
 
-			if (flags&simrml_disable_extremum_motion_states_calc)
-				obj.VFlags->EnableTheCalculationOfTheExtremumMotionStates=false;
-			else
-				obj.VFlags->EnableTheCalculationOfTheExtremumMotionStates=true; // default
+			// if (flags&simrml_disable_extremum_motion_states_calc)
+			// 	obj.input.EnableTheCalculationOfTheExtremumMotionStates=false;
+			// else
+			// 	obj.input.EnableTheCalculationOfTheExtremumMotionStates=true; // default
 		}
 		off+=4;
 
@@ -499,7 +458,7 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		{
 			if (allObjects[i].objectHandle==auxiliaryData[1])
 			{
-				rmlPos=(allObjects[i].PIP!=NULL);
+				rmlPos=(allObjects[i].input->interface == Interface::Position);
 				index=i;
 				break;
 			}
@@ -513,14 +472,14 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 			{
 				for (int i=0;i<cnt;i++)
 				{
-					replyData[0]=allObjects[index].RML->RMLPosition(*allObjects[index].PIP,allObjects[index].POP,*allObjects[index].PFlags);
+					replyData[0]=allObjects[index].ruckig->update(*allObjects[index].input,*allObjects[index].output);
 
 					for (int j=0;j<dofs;j++)
-						allObjects[index].PIP->CurrentPositionVector->VecData[j]=allObjects[index].POP->NewPositionVector->VecData[j];
+						allObjects[index].input->current_position[j]=allObjects[index].output->new_position[j];
 					for (int j=0;j<dofs;j++)
-						allObjects[index].PIP->CurrentVelocityVector->VecData[j]=allObjects[index].POP->NewVelocityVector->VecData[j];
+						allObjects[index].input->current_velocity[j]=allObjects[index].output->new_velocity[j];
 					for (int j=0;j<dofs;j++)
-						allObjects[index].PIP->CurrentAccelerationVector->VecData[j]=allObjects[index].POP->NewAccelerationVector->VecData[j];
+						allObjects[index].input->current_acceleration[j]=allObjects[index].output->new_acceleration[j];
 
 					if (replyData[0]!=0)
 						break;
@@ -532,16 +491,16 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 				int off=0;
 
 				for (int i=0;i<dofs;i++)
-					((double*)(retBuff+off))[i]=allObjects[index].POP->NewPositionVector->VecData[i]/1000.0;
+					((double*)(retBuff+off))[i]=allObjects[index].output->new_position[i];
 				off+=dofs*8;
 				for (int i=0;i<dofs;i++)
-					((double*)(retBuff+off))[i]=allObjects[index].POP->NewVelocityVector->VecData[i]/1000.0;
+					((double*)(retBuff+off))[i]=allObjects[index].output->new_velocity[i];
 				off+=dofs*8;
 				for (int i=0;i<dofs;i++)
-					((double*)(retBuff+off))[i]=allObjects[index].POP->NewAccelerationVector->VecData[i]/1000.0;
+					((double*)(retBuff+off))[i]=allObjects[index].output->new_acceleration[i];
 				off+=dofs*8;
 
-				((double*)(retBuff+off))[0]=allObjects[index].POP->SynchronizationTime;
+				((double*)(retBuff+off))[0]=allObjects[index].output->trajectory.get_duration();
 				off+=8*8;
 
 				retVal=retBuff;
@@ -550,14 +509,14 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 			{ // RML velocity
 				for (int i=0;i<cnt;i++)
 				{
-					replyData[0]=allObjects[index].RML->RMLVelocity(*allObjects[index].VIP,allObjects[index].VOP,*allObjects[index].VFlags);
+					replyData[0]=allObjects[index].ruckig->update(*allObjects[index].input,*allObjects[index].output);
 
 					for (int j=0;j<dofs;j++)
-						allObjects[index].VIP->CurrentPositionVector->VecData[j]=allObjects[index].VOP->NewPositionVector->VecData[j];
+						allObjects[index].input->current_position[j]=allObjects[index].output->new_position[j];
 					for (int j=0;j<dofs;j++)
-						allObjects[index].VIP->CurrentVelocityVector->VecData[j]=allObjects[index].VOP->NewVelocityVector->VecData[j];
+						allObjects[index].input->current_velocity[j]=allObjects[index].output->new_velocity[j];
 					for (int j=0;j<dofs;j++)
-						allObjects[index].VIP->CurrentAccelerationVector->VecData[j]=allObjects[index].VOP->NewAccelerationVector->VecData[j];
+						allObjects[index].input->current_acceleration[j]=allObjects[index].output->new_acceleration[j];
 
 					if (replyData[0]!=0)
 						break;
@@ -569,16 +528,16 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 				int off=0;
 
 				for (int i=0;i<dofs;i++)
-					((double*)(retBuff+off))[i]=allObjects[index].VOP->NewPositionVector->VecData[i]/1000.0;
+					((double*)(retBuff+off))[i]=allObjects[index].output->new_position[i];
 				off+=dofs*8;
 				for (int i=0;i<dofs;i++)
-					((double*)(retBuff+off))[i]=allObjects[index].VOP->NewVelocityVector->VecData[i]/1000.0;
+					((double*)(retBuff+off))[i]=allObjects[index].output->new_velocity[i];
 				off+=dofs*8;
 				for (int i=0;i<dofs;i++)
-					((double*)(retBuff+off))[i]=allObjects[index].VOP->NewAccelerationVector->VecData[i]/1000.0;
+					((double*)(retBuff+off))[i]=allObjects[index].output->new_acceleration[i];
 				off+=dofs*8;
 
-				((double*)(retBuff+off))[0]=allObjects[index].VOP->SynchronizationTime;
+				((double*)(retBuff+off))[0]=allObjects[index].output->trajectory.get_duration();
 				off+=8*8;
 
 				retVal=retBuff;
@@ -594,20 +553,9 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		{
 			if (allObjects[i].objectHandle==auxiliaryData[1])
 			{
-				if (allObjects[i].PIP!=NULL)
-				{
-					delete allObjects[i].RML;
-					delete allObjects[i].PIP;
-					delete allObjects[i].POP;
-					delete allObjects[i].PFlags;
-				}
-				else
-				{
-					delete allObjects[i].RML;
-					delete allObjects[i].VIP;
-					delete allObjects[i].VOP;
-					delete allObjects[i].VFlags;
-				}
+				delete allObjects[i].ruckig;
+				delete allObjects[i].input;
+				delete allObjects[i].output;
 				allObjects.erase(allObjects.begin()+i);
 				replyData[1]=1;
 				break;
@@ -645,20 +593,9 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		{
 			if (allObjects[i].destroyAtSimulationEnd)
 			{
-				if (allObjects[i].PIP!=NULL)
-				{
-					delete allObjects[i].RML;
-					delete allObjects[i].PIP;
-					delete allObjects[i].POP;
-					delete allObjects[i].PFlags;
-				}
-				else
-				{
-					delete allObjects[i].RML;
-					delete allObjects[i].VIP;
-					delete allObjects[i].VOP;
-					delete allObjects[i].VFlags;
-				}
+				delete allObjects[i].ruckig;
+				delete allObjects[i].input;
+				delete allObjects[i].output;
 				allObjects.erase(allObjects.begin()+i);
 				i--; // reprocess this position
 			}
@@ -667,3 +604,4 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 
 	return(retVal);
 }
+
