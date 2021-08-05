@@ -17,9 +17,9 @@ using namespace ruckig;
 
 struct SObj
 {
-	Ruckig<0> *ruckig;
-	InputParameter<0> *input;
-	OutputParameter<0> *output;
+	Ruckig<DynamicDOFs> *ruckig;
+	InputParameter<DynamicDOFs> *input;
+	OutputParameter<DynamicDOFs> *output;
 
 	bool destroyAtSimulationEnd;
 	int objectHandle;
@@ -102,9 +102,9 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		double timeStep=((double*)(data+4))[0];
 		int off=12;
 
-		Ruckig<0> ruckig {(size_t)dofs, timeStep};
-		InputParameter<0> input {(size_t)dofs};
-		OutputParameter<0> output {(size_t)dofs};
+		Ruckig<DynamicDOFs> ruckig {(size_t)dofs, timeStep};
+		InputParameter<DynamicDOFs> input {(size_t)dofs};
+		OutputParameter<DynamicDOFs> output {(size_t)dofs};
 
 		for (int i=0;i<dofs;i++)
 			input.current_position[i]=((double*)(data+off))[i];
@@ -208,9 +208,11 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		double timeStep=((double*)(data+4))[0];
 		int off=12;
 
-		Ruckig<0> ruckig {(size_t)dofs,timeStep};
-		InputParameter<0> input {(size_t)dofs};
-		OutputParameter<0> output {(size_t)dofs};
+		Ruckig<DynamicDOFs> ruckig {(size_t)dofs,timeStep};
+		InputParameter<DynamicDOFs> input {(size_t)dofs};
+		OutputParameter<DynamicDOFs> output {(size_t)dofs};
+
+        input.control_interface = ControlInterface::Velocity;
 
 		for (int i=0;i<dofs;i++)
 			input.current_position[i]=((double*)(data+off))[i];
@@ -302,9 +304,9 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		obj.smallestTimeStep=timeStep;
 		int off=12;
 
-		obj.ruckig = new Ruckig<0>(dofs,timeStep);
-		obj.input = new InputParameter<0>(dofs);
-		obj.output = new OutputParameter<0>(dofs);
+		obj.ruckig = new Ruckig<DynamicDOFs>(dofs,timeStep);
+		obj.input = new InputParameter<DynamicDOFs>(dofs);
+		obj.output = new OutputParameter<DynamicDOFs>(dofs);
 
 		for (int i=0;i<dofs;i++)
 			obj.input->current_position[i]=((double*)(data+off))[i];
@@ -392,9 +394,11 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		obj.smallestTimeStep=timeStep;
 		int off=12;
 
-		obj.ruckig = new Ruckig<0>(dofs, timeStep);
-		obj.input = new InputParameter<0>(dofs);
-		obj.output = new OutputParameter<0>(dofs);
+		obj.ruckig = new Ruckig<DynamicDOFs>(dofs, timeStep);
+		obj.input = new InputParameter<DynamicDOFs>(dofs);
+		obj.output = new OutputParameter<DynamicDOFs>(dofs);
+
+        obj.input->control_interface = ControlInterface::Velocity;
 
 		for (int i=0;i<dofs;i++)
 			obj.input->current_position[i]=((double*)(data+off))[i];
@@ -458,7 +462,7 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 		{
 			if (allObjects[i].objectHandle==auxiliaryData[1])
 			{
-				rmlPos=(allObjects[i].input->interface == Interface::Position);
+				rmlPos=(allObjects[i].input->control_interface == ControlInterface::Position);
 				index=i;
 				break;
 			}
