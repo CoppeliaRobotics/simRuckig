@@ -13,11 +13,15 @@ INCLUDEPATH += "ruckig/include"
 INCLUDEPATH += "../include"
 
 *-msvc* {
+    DEFINES += _USE_MATH_DEFINES
+    DEFINES += NOMINMAX
 	QMAKE_CXXFLAGS += -O2
 	QMAKE_CXXFLAGS += -W3
+    QMAKE_CXXFLAGS += -std:c++17
 }
 *-g++* {
-	QMAKE_CXXFLAGS += -O3
+    QMAKE_CXXFLAGS += -std=c++17
+    QMAKE_CXXFLAGS += -O3
 	QMAKE_CXXFLAGS += -Wall
 	QMAKE_CXXFLAGS += -Wno-unused-parameter
 	QMAKE_CXXFLAGS += -Wno-strict-aliasing
@@ -64,7 +68,7 @@ unix:!symbian {
 
 HEADERS += \
     ../include/simLib.h \
-    simExtRML2.h \
+    simExtRuckig.h \
     ruckig/include/ruckig/block.hpp \
     ruckig/include/ruckig/brake.hpp \
     ruckig/include/ruckig/input_parameter.hpp \
@@ -78,7 +82,7 @@ HEADERS += \
 
 SOURCES += \
     ../common/simLib.cpp \
-    simExtRML2.cpp \
+    simExtRuckig.cpp \
     ruckig/src/brake.cpp \
     ruckig/src/position-step1.cpp \
     ruckig/src/position-step2.cpp \

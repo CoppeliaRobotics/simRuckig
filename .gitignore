@@ -12,6 +12,7 @@ libsimExtRuckig.so.1.0.0
 Makefile.Debug
 Makefile.Release
 debug/
+build/
 object_script.simExtRuckig.Debug
 object_script.simExtRuckig.Release
 release/
