@@ -1,0 +1,1 @@
+simExtRuckig is a CoppeliaSim plugin that wraps the Ruckig Online Trajectory Generation library. See [Ruckig](https://github.com/pantor/ruckig#readme) for more details.
