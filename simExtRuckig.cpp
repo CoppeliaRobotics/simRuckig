@@ -7,8 +7,10 @@
 using namespace ruckig;
 
 #ifdef _WIN32
-	#include <shlwapi.h>
-	#pragma comment(lib, "Shlwapi.lib")
+    #include <shlwapi.h>
+    #pragma comment(lib, "Shlwapi.lib")
+#else
+    #include <unistd.h>
 #endif
 
 #define PLUGIN_VERSION 1 // 1 since CoppeliaSim V4.3.0
