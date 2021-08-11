@@ -19,10 +19,10 @@ find_package(CoppeliaSim 4.1.0.0 REQUIRED)
 add_subdirectory(ruckig)
 
 coppeliasim_add_plugin(
-    simExtRML2
+    simExtRuckig
     LEGACY
     SOURCES
     simExtRuckig.cpp
 )
-target_include_directories(simExtRML2 PRIVATE ruckig/include)
-target_link_libraries(simExtRML2 ruckig::ruckig)
+target_include_directories(simExtRuckig PRIVATE ruckig/include)
+target_link_libraries(simExtRuckig ruckig::ruckig)
