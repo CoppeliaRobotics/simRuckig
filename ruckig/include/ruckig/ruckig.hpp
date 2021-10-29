@@ -32,16 +32,22 @@ public:
     const double delta_time;
 
     template <size_t D = DOFs, typename std::enable_if<D >= 1, int>::type = 0>
-    explicit Ruckig(): degrees_of_freedom(DOFs), delta_time(-1.0) { }
+    explicit Ruckig(): degrees_of_freedom(DOFs), delta_time(-1.0) {
+    }
 
     template <size_t D = DOFs, typename std::enable_if<D >= 1, int>::type = 0>
-    explicit Ruckig(double delta_time): degrees_of_freedom(DOFs), delta_time(delta_time) { }
+    explicit Ruckig(double delta_time): degrees_of_freedom(DOFs), delta_time(delta_time) {
+    }
+
 
     template <size_t D = DOFs, typename std::enable_if<D == 0, int>::type = 0>
-    explicit Ruckig(size_t dofs): degrees_of_freedom(dofs), delta_time(-1.0), current_input(InputParameter<0>(dofs)) { }
+    explicit Ruckig(size_t dofs): degrees_of_freedom(dofs), delta_time(-1.0), current_input(InputParameter<0>(dofs)) {
+    }
 
     template <size_t D = DOFs, typename std::enable_if<D == 0, int>::type = 0>
-    explicit Ruckig(size_t dofs, double delta_time): degrees_of_freedom(dofs), delta_time(delta_time), current_input(InputParameter<0>(dofs)) { }
+    explicit Ruckig(size_t dofs, double delta_time): degrees_of_freedom(dofs), delta_time(delta_time), current_input(InputParameter<0>(dofs)) {
+    }
+
 
     //! Validate the input for the trajectory calculation
     bool validate_input(const InputParameter<DOFs>& input) const {
@@ -121,6 +127,17 @@ public:
             }
         }
 
+        if (!input.intermediate_positions.empty() && input.control_interface == ControlInterface::Position) {
+            if (input.minimum_duration || input.duration_discretization != DurationDiscretization::Continuous) {
+                return false;
+            }
+
+            if (input.per_dof_control_interface || input.per_dof_synchronization) {
+                return false;
+            }
+        }
+
+        // Check for intermediate waypoints here
         if (!input.intermediate_positions.empty()) {
             return false;
         }
@@ -130,11 +147,18 @@ public:
 
     //! Calculate a new trajectory for the given input
     Result calculate(const InputParameter<DOFs>& input, Trajectory<DOFs>& trajectory) {
+        bool was_interrupted {false};
+        return calculate(input, trajectory, was_interrupted);
+    }
+
+    //! Calculate a new trajectory for the given input and check for interruption
+    Result calculate(const InputParameter<DOFs>& input, Trajectory<DOFs>& trajectory, bool& was_interrupted) {
         if (!validate_input(input)) {
             return Result::ErrorInvalidInput;
         }
 
-        return trajectory.template calculate<throw_error, return_error_at_maximal_duration>(input, delta_time);
+        const Result result = trajectory.template calculate<throw_error, return_error_at_maximal_duration>(input, delta_time, was_interrupted);
+        return result;
     }
 
     //! Get the next output state (with step delta_time) along the calculated trajectory for the given input
@@ -150,7 +174,7 @@ public:
         output.new_calculation = false;
 
         if (input != current_input) {
-            Result result = calculate(input, output.trajectory);
+            Result result = calculate(input, output.trajectory, output.was_calculation_interrupted);
             if (result != Result::Working) {
                 return result;
             }
@@ -160,15 +184,15 @@ public:
             output.new_calculation = true;
         }
 
+        const size_t old_section = output.new_section;
         output.time += delta_time;
-        output.trajectory.at_time(output.time, output.new_position, output.new_velocity, output.new_acceleration);
+        output.trajectory.at_time(output.time, output.new_position, output.new_velocity, output.new_acceleration, output.new_section);
+        output.did_section_change = (output.new_section != old_section);
 
         const auto stop = std::chrono::high_resolution_clock::now();
         output.calculation_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000.0;
 
-        current_input.current_position = output.new_position;
-        current_input.current_velocity = output.new_velocity;
-        current_input.current_acceleration = output.new_acceleration;
+        output.pass_to_input(current_input);
 
         if (output.time > output.trajectory.get_duration()) {
             return Result::Finished;

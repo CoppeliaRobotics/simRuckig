@@ -10,13 +10,14 @@
 
 namespace ruckig {
 
-//! Result type of the OTGs update function
+//! Result type of Ruckig's update function
 enum Result {
     Working = 0, ///< The trajectory is calculated normally
     Finished = 1, ///< Trajectory has reached its final position
     Error = -1, ///< Unclassified error
     ErrorInvalidInput = -100, ///< Error in the input parameter
-    ErrorTrajectoryDuration = -101, ///< The trajectory duration exceed the numeral limits
+    ErrorTrajectoryDuration = -101, ///< The trajectory duration exceeds its numerical limits
+    ErrorPositionalLimits = -102, ///< The trajectory exceeds the given positional limits (only in Ruckig Pro)
     ErrorExecutionTimeCalculation = -110, ///< Error during the extremel time calculation (Step 1)
     ErrorSynchronizationCalculation = -111, ///< Error during the synchronization calculation (Step 2)
 };
@@ -35,12 +36,12 @@ enum class Synchronization {
 };
 
 enum class DurationDiscretization {
-    Continuous, ///< Every trajectory duration is allowed (Default)
-    Discrete, ///< The trajectory duration must be a multiple of the control cycle
+    Continuous, ///< Every trajectory synchronization duration is allowed (Default)
+    Discrete, ///< The trajectory synchronization duration must be a multiple of the control cycle
 };
 
 
-//! Input type of the OTG
+//! Input type of Ruckig
 template<size_t DOFs>
 class InputParameter {
     template<class T> using Vector = typename std::conditional<DOFs >= 1, std::array<T, DOFs>, std::vector<T>>::type;
@@ -69,24 +70,36 @@ public:
     Synchronization synchronization {Synchronization::Time};
     DurationDiscretization duration_discretization {DurationDiscretization::Continuous};
 
-    //! Current state
+    // Current state
     Vector<double> current_position, current_velocity, current_acceleration;
 
-    //! Target state
+    // Target state
     Vector<double> target_position, target_velocity, target_acceleration;
 
-    //! Kinematic constraints
+    // Kinematic constraints
     Vector<double> max_velocity, max_acceleration, max_jerk;
     std::optional<Vector<double>> min_velocity, min_acceleration;
 
-    //! Intermediate waypoints
+    //! Intermediate waypoints (only in Ruckig Pro)
     std::vector<Vector<double>> intermediate_positions;
+
+    // Positional constraints (only in Ruckig Pro)
+    std::optional<Vector<double>> max_position, min_position;
 
     //! Is the DoF considered for calculation?
     Vector<bool> enabled;
 
+    //! Per-DoF control_interface (overwrites global control_interface)
+    std::optional<Vector<ControlInterface>> per_dof_control_interface;
+
+    //! Per-DoF synchronization (overwrites global synchronization)
+    std::optional<Vector<Synchronization>> per_dof_synchronization;
+
     //! Optional minimum trajectory duration
     std::optional<double> minimum_duration;
+
+    //! Optional duration [µs] after which the trajectory calculation is (softly) interrupted (only in Ruckig Pro)
+    std::optional<double> interrupt_calculation_duration;
 
     template <size_t D = DOFs, typename std::enable_if<D >= 1, int>::type = 0>
     InputParameter(): degrees_of_freedom(DOFs) {
@@ -120,6 +133,9 @@ public:
             || max_velocity != rhs.max_velocity
             || max_acceleration != rhs.max_acceleration
             || max_jerk != rhs.max_jerk
+            || intermediate_positions != rhs.intermediate_positions
+            || max_position != rhs.max_position
+            || min_position != rhs.min_position
             || enabled != rhs.enabled
             || minimum_duration != rhs.minimum_duration
             || min_velocity != rhs.min_velocity
@@ -127,6 +143,8 @@ public:
             || control_interface != rhs.control_interface
             || synchronization != rhs.synchronization
             || duration_discretization != rhs.duration_discretization
+            || per_dof_control_interface != rhs.per_dof_control_interface
+            || per_dof_synchronization != rhs.per_dof_synchronization
         );
     }
 
@@ -146,6 +164,13 @@ public:
         }
         if (min_acceleration) {
             ss << "inp.min_acceleration = [" << this->join(min_acceleration.value()) << "]\n";
+        }
+        if (!intermediate_positions.empty()) {
+            ss << "inp.intermediate_positions = [\n";
+            for (auto p: intermediate_positions) {
+                ss << "    [" << this->join(p) << "],\n";
+            }
+            ss << "]\n";
         }
         return ss.str();
     }

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 
-project(ruckig VERSION 0.3.3 LANGUAGES CXX)
+project(ruckig VERSION 0.4.0 LANGUAGES CXX)
 
 
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -19,7 +19,7 @@ if(WIN32 AND BUILD_SHARED_LIBS)
 endif()
 
 
-find_package(Reflexxes)
+find_package(Reflexxes QUIET)
 
 
 add_library(ruckig
@@ -58,7 +58,7 @@ endif()
 
 
 if(BUILD_EXAMPLES)
-  foreach(example IN ITEMS position)
+  foreach(example IN ITEMS 1_position 2_position_offline 5_velocity 6_stop 7_minimum_duration 8_dynamic_dofs)
     add_executable(example-${example} "examples/${example}.cpp")
     target_link_libraries(example-${example} PRIVATE ruckig)
   endforeach()

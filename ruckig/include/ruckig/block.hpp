@@ -4,6 +4,7 @@
 #include <limits>
 #include <numeric>
 #include <optional>
+#include <string>
 
 #include <ruckig/profile.hpp>
 

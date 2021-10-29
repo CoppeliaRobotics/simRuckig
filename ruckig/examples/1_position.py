@@ -10,33 +10,36 @@ from ruckig import InputParameter, OutputParameter, Result, Ruckig
 
 
 if __name__ == '__main__':
+    # Create instances: the Ruckig OTG as well as input and output parameters
+    otg = Ruckig(3, 0.01)  # DoFs, control cycle
     inp = InputParameter(3)
-    inp.current_position = [0.2, 0, -1]
-    inp.current_velocity = [0, 0.2, 0]
-    inp.current_acceleration = [0, 1, 0]
-    inp.target_position = [0, -1, -1]
-    inp.target_velocity = [0.2, 0, 0]
-    inp.target_acceleration = [0, 0.1, -0.1]
-    inp.max_velocity = [2, 1, 1]
-    inp.max_acceleration = [0.2, 2, 2]
-    inp.max_jerk = [3, 4, 5]
-
-    otg = Ruckig(3, 0.05)
-
     out = OutputParameter(3)
-    first_output = None
 
+    # Set input parameters
+    inp.current_position = [0.0, 0.0, 0.5]
+    inp.current_velocity = [0.0, -2.2, -0.5]
+    inp.current_acceleration = [0.0, 2.5, -0.5]
+
+    inp.target_position = [-5.0, -2.0, -3.5]
+    inp.target_velocity = [0.0, -0.5, -2.0]
+    inp.target_acceleration = [0.0, 0.0, 0.5]
+
+    inp.max_velocity = [3.0, 1.0, 3.0]
+    inp.max_acceleration = [3.0, 2.0, 1.0]
+    inp.max_jerk = [4.0, 3.0, 2.0]
+
+    
     print('\t'.join(['t'] + [str(i) for i in range(otg.degrees_of_freedom)]))
 
+    # Generate the trajectory within the control loop
+    first_output = None
     res = Result.Working
     while res == Result.Working:
         res = otg.update(inp, out)
 
         print('\t'.join([f'{out.time:0.3f}'] + [f'{p:0.3f}' for p in out.new_position]))
 
-        inp.current_position = out.new_position
-        inp.current_velocity = out.new_velocity
-        inp.current_acceleration = out.new_acceleration
+        out.pass_to_input(inp)
 
         if not first_output:
             first_output = copy(out)
