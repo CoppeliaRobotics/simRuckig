@@ -25,6 +25,8 @@ struct SObj
 	int objectHandle;
 	int dofs;
 	double smallestTimeStep;
+    double timeLeft;
+    bool first;
 };
 
 static int nextObjectHandle=0;
@@ -130,6 +132,7 @@ SIM_DLLEXPORT int ruckigPlugin_pos(int scriptHandle,int dofs,double smallestTime
         if ((flags&3)==sim_ruckig_nosync)
             obj.input->synchronization=Synchronization::None;
     }
+    obj.first=true;
 
     allObjects.push_back(obj);
     return(obj.objectHandle);
@@ -175,6 +178,7 @@ SIM_DLLEXPORT int ruckigPlugin_vel(int scriptHandle,int dofs,double smallestTime
             obj.input->synchronization=Synchronization::None;
     }
 
+    obj.first=true;
     allObjects.push_back(obj);
     return(obj.objectHandle);
 }
@@ -220,8 +224,6 @@ SIM_DLLEXPORT int ruckigPlugin_step(int objHandle,double timeStep,double* newPos
                 newVel[i]=allObjects[index].output->new_velocity[i];
                 newAccel[i]=allObjects[index].output->new_acceleration[i];
             }
-
-            syncTime[0]=allObjects[index].output->trajectory.get_duration();
         }
         else
         {
@@ -246,9 +248,12 @@ SIM_DLLEXPORT int ruckigPlugin_step(int objHandle,double timeStep,double* newPos
                 newVel[i]=allObjects[index].output->new_velocity[i];
                 newAccel[i]=allObjects[index].output->new_acceleration[i];
             }
-
-            syncTime[0]=allObjects[index].output->trajectory.get_duration();
         }
+        if (allObjects[index].first)
+            allObjects[index].timeLeft=allObjects[index].output->trajectory.get_duration();
+        allObjects[index].timeLeft-=timeStep;
+        syncTime[0]=allObjects[index].timeLeft;
+        allObjects[index].first=false;
     }
     return(retVal);
 }
