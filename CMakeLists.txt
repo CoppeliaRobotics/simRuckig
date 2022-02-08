@@ -16,7 +16,12 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${LIBPLUGIN_DIR}/cmake)
 find_package(CoppeliaSim 4.1.0.0 REQUIRED)
 
-add_subdirectory(ruckig)
+include(ExternalProject)
+ExternalProject_Add(libruckig-build
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ruckig
+    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/ruckig
+    INSTALL_COMMAND ""
+)
 
 coppeliasim_add_plugin(
     simExtRuckig
@@ -24,5 +29,10 @@ coppeliasim_add_plugin(
     SOURCES
     simExtRuckig.cpp
 )
+add_dependencies(simExtRuckig libruckig-build)
 target_include_directories(simExtRuckig PRIVATE ruckig/include)
-target_link_libraries(simExtRuckig ruckig::ruckig)
+target_link_libraries(simExtRuckig ${CMAKE_CURRENT_BINARY_DIR}/ruckig/${CMAKE_SHARED_LIBRARY_PREFIX}ruckig${CMAKE_SHARED_LIBRARY_SUFFIX})
+if(APPLE)
+    # for some reason, deploy tool won't copy libruckig.dylib
+    coppeliasim_add_library(${CMAKE_CURRENT_BINARY_DIR}/ruckig/libruckig.dylib)
+endif(APPLE)
