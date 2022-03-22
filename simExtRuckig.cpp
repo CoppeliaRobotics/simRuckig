@@ -2,6 +2,7 @@
 #include "simLib.h"
 #include <iostream>
 #include <vector>
+#include <map>
 
 #include <ruckig/ruckig.hpp>
 using namespace ruckig;
@@ -22,7 +23,6 @@ struct SObj
 	OutputParameter<DynamicDOFs> *output;
 
     int scriptHandle;
-	int objectHandle;
 	int dofs;
 	double smallestTimeStep;
     double timeLeft;
@@ -30,7 +30,7 @@ struct SObj
 };
 
 static int nextObjectHandle=0;
-static std::vector<SObj> allObjects;
+static std::map<int,SObj> allObjects;
 static LIBRARY simLib;
 
 SIM_DLLEXPORT unsigned char simStart(void* reservedPointer,int reservedInt)
@@ -77,16 +77,21 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 
     if (message==sim_message_eventcallback_scriptstatedestroyed)
     {
-        for (size_t i=0;i<allObjects.size();i++)
+        std::vector<int> toErase;
+        auto it=allObjects.begin();
+        while (it!=allObjects.end())
         {
-            if (allObjects[i].scriptHandle==auxiliaryData[0])
-            {
-                delete allObjects[i].ruckig;
-                delete allObjects[i].input;
-                delete allObjects[i].output;
-                allObjects.erase(allObjects.begin()+i);
-                break;
-            }
+            if (it->second.scriptHandle==auxiliaryData[0])
+                toErase.push_back(it->first);
+            ++it;
+        }
+        for (size_t i=0;i<toErase.size();i++)
+        {
+            auto it=allObjects.find(toErase[i]);
+            delete it->second.ruckig;
+            delete it->second.input;
+            delete it->second.output;
+            allObjects.erase(it);
         }
     }
 
@@ -97,7 +102,6 @@ SIM_DLLEXPORT int ruckigPlugin_pos(int scriptHandle,int dofs,double smallestTime
 {
     SObj obj;
     obj.scriptHandle=scriptHandle;
-    obj.objectHandle=nextObjectHandle++;
 
     obj.dofs=dofs;
     obj.smallestTimeStep=smallestTimeStep;
@@ -134,15 +138,22 @@ SIM_DLLEXPORT int ruckigPlugin_pos(int scriptHandle,int dofs,double smallestTime
     }
     obj.first=true;
 
-    allObjects.push_back(obj);
-    return(obj.objectHandle);
+    int objectHandle=0;
+    if (nextObjectHandle<2000000000)
+        objectHandle=nextObjectHandle++;
+    else
+    {
+        while (allObjects.find(objectHandle)!=allObjects.end())
+            objectHandle++;
+    }
+    allObjects[objectHandle]=obj;
+    return(objectHandle);
 }
 
 SIM_DLLEXPORT int ruckigPlugin_vel(int scriptHandle,int dofs,double smallestTimeStep,int flags,const double* currentPos,const double* currentVel,const double* currentAccel,const double* maxAccel,const double* maxJerk,const unsigned char* selection,const double* targetVel)
 {
     SObj obj;
     obj.scriptHandle=scriptHandle;
-    obj.objectHandle=nextObjectHandle++;
 
     obj.dofs=dofs;
     obj.smallestTimeStep=smallestTimeStep;
@@ -179,39 +190,40 @@ SIM_DLLEXPORT int ruckigPlugin_vel(int scriptHandle,int dofs,double smallestTime
     }
 
     obj.first=true;
-    allObjects.push_back(obj);
-    return(obj.objectHandle);
+
+    int objectHandle=0;
+    if (nextObjectHandle<2000000000)
+        objectHandle=nextObjectHandle++;
+    else
+    {
+        while (allObjects.find(objectHandle)!=allObjects.end())
+            objectHandle++;
+    }
+    allObjects[objectHandle]=obj;
+    return(objectHandle);
 }
 
 SIM_DLLEXPORT int ruckigPlugin_step(int objHandle,double timeStep,double* newPos,double* newVel,double* newAccel,double* syncTime)
 {
-    int index=-1;
-    bool ruckigPos=true;
     int retVal=-1;
-    for (int i=0;i<int(allObjects.size());i++)
+
+    auto it=allObjects.find(objHandle);
+    if (it!=allObjects.end())
     {
-        if (allObjects[i].objectHandle==objHandle)
-        {
-            ruckigPos=(allObjects[i].input->control_interface == ControlInterface::Position);
-            index=i;
-            break;
-        }
-    }
-    if (index!=-1)
-    {
-        int dofs=allObjects[index].dofs;
-        int cnt=int((timeStep/allObjects[index].smallestTimeStep)+0.5);
+        bool ruckigPos=(it->second.input->control_interface == ControlInterface::Position);
+        int dofs=it->second.dofs;
+        int cnt=int((timeStep/it->second.smallestTimeStep)+0.5);
         if (ruckigPos)
         {
             for (int i=0;i<cnt;i++)
             {
-                retVal=allObjects[index].ruckig->update(*allObjects[index].input,*allObjects[index].output);
+                retVal=it->second.ruckig->update(*it->second.input,*it->second.output);
 
                 for (int j=0;j<dofs;j++)
                 {
-                    allObjects[index].input->current_position[j]=allObjects[index].output->new_position[j];
-                    allObjects[index].input->current_velocity[j]=allObjects[index].output->new_velocity[j];
-                    allObjects[index].input->current_acceleration[j]=allObjects[index].output->new_acceleration[j];
+                    it->second.input->current_position[j]=it->second.output->new_position[j];
+                    it->second.input->current_velocity[j]=it->second.output->new_velocity[j];
+                    it->second.input->current_acceleration[j]=it->second.output->new_acceleration[j];
                 }
 
                 if (retVal!=0)
@@ -220,22 +232,22 @@ SIM_DLLEXPORT int ruckigPlugin_step(int objHandle,double timeStep,double* newPos
 
             for (int i=0;i<dofs;i++)
             {
-                newPos[i]=allObjects[index].output->new_position[i];
-                newVel[i]=allObjects[index].output->new_velocity[i];
-                newAccel[i]=allObjects[index].output->new_acceleration[i];
+                newPos[i]=it->second.output->new_position[i];
+                newVel[i]=it->second.output->new_velocity[i];
+                newAccel[i]=it->second.output->new_acceleration[i];
             }
         }
         else
         {
             for (int i=0;i<cnt;i++)
             {
-                retVal=allObjects[index].ruckig->update(*allObjects[index].input,*allObjects[index].output);
+                retVal=it->second.ruckig->update(*it->second.input,*it->second.output);
 
                 for (int j=0;j<dofs;j++)
                 {
-                    allObjects[index].input->current_position[j]=allObjects[index].output->new_position[j];
-                    allObjects[index].input->current_velocity[j]=allObjects[index].output->new_velocity[j];
-                    allObjects[index].input->current_acceleration[j]=allObjects[index].output->new_acceleration[j];
+                    it->second.input->current_position[j]=it->second.output->new_position[j];
+                    it->second.input->current_velocity[j]=it->second.output->new_velocity[j];
+                    it->second.input->current_acceleration[j]=it->second.output->new_acceleration[j];
                 }
 
                 if (retVal!=0)
@@ -244,16 +256,16 @@ SIM_DLLEXPORT int ruckigPlugin_step(int objHandle,double timeStep,double* newPos
 
             for (int i=0;i<dofs;i++)
             {
-                newPos[i]=allObjects[index].output->new_position[i];
-                newVel[i]=allObjects[index].output->new_velocity[i];
-                newAccel[i]=allObjects[index].output->new_acceleration[i];
+                newPos[i]=it->second.output->new_position[i];
+                newVel[i]=it->second.output->new_velocity[i];
+                newAccel[i]=it->second.output->new_acceleration[i];
             }
         }
-        if (allObjects[index].first)
-            allObjects[index].timeLeft=allObjects[index].output->trajectory.get_duration();
-        allObjects[index].timeLeft-=timeStep;
-        syncTime[0]=allObjects[index].timeLeft;
-        allObjects[index].first=false;
+        if (it->second.first)
+            it->second.timeLeft=it->second.output->trajectory.get_duration();
+        it->second.timeLeft-=timeStep;
+        syncTime[0]=it->second.timeLeft;
+        it->second.first=false;
     }
     return(retVal);
 }
@@ -261,27 +273,23 @@ SIM_DLLEXPORT int ruckigPlugin_step(int objHandle,double timeStep,double* newPos
 SIM_DLLEXPORT int ruckigPlugin_remove(int objHandle)
 {
     int retVal=-1;
-    for (size_t i=0;i<allObjects.size();i++)
+    auto it=allObjects.find(objHandle);
+    if (it!=allObjects.end())
     {
-        if (allObjects[i].objectHandle==objHandle)
-        {
-            delete allObjects[i].ruckig;
-            delete allObjects[i].input;
-            delete allObjects[i].output;
-            allObjects.erase(allObjects.begin()+i);
-            retVal=1;
-            break;
-        }
+        delete it->second.ruckig;
+        delete it->second.input;
+        delete it->second.output;
+        allObjects.erase(it);
+        retVal=1;
     }
     return(retVal);
 }
 
 SIM_DLLEXPORT int ruckigPlugin_dofs(int objHandle)
 {
-    for (size_t i=0;i<allObjects.size();i++)
-    {
-        if (allObjects[i].objectHandle==objHandle)
-            return(allObjects[i].dofs);
-    }
-    return(-1);
+    int retVal=-1;
+    auto it=allObjects.find(objHandle);
+    if (it!=allObjects.end())
+        retVal=it->second.dofs;
+    return(retVal);
 }
