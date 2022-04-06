@@ -120,13 +120,8 @@ SIM_DLLEXPORT int ruckigPlugin_pos(int scriptHandle,int dofs,double smallestTime
         obj.input->target_velocity[i]=targetVel[i];
     }
 
-    for (int i=0;i<dofs;i++)
-    { // for now no min/max values
-        obj.input->max_velocity[i]=maxVel[i];
-        obj.input->max_acceleration[i]=maxAccel[i];
-        obj.input->max_jerk[i]=maxJerk[i];
-    }
-
+    bool usesMinVel=false;
+    bool usesMinAccel=false;
     if (flags>=0)
     { // we don't have default values!
         if ( ((flags&3)==sim_ruckig_phasesync)||((flags&3)==simrml_only_phase_sync) )
@@ -135,7 +130,27 @@ SIM_DLLEXPORT int ruckigPlugin_pos(int scriptHandle,int dofs,double smallestTime
             obj.input->synchronization=Synchronization::Time;
         if ((flags&3)==sim_ruckig_nosync)
             obj.input->synchronization=Synchronization::None;
+        usesMinVel=((flags&sim_ruckig_minvel)!=0);
+        usesMinAccel=((flags&sim_ruckig_minaccel)!=0);
     }
+
+    std::vector<double> minVel;
+    std::vector<double> minAcc;
+    for (int i=0;i<dofs;i++)
+    {
+        obj.input->max_velocity[i]=maxVel[i];
+        if (usesMinVel)
+            minVel.push_back(maxVel[dofs+i]);
+        obj.input->max_acceleration[i]=maxAccel[i];
+        if (usesMinAccel)
+            minAcc.push_back(maxAccel[dofs+i]);
+        obj.input->max_jerk[i]=maxJerk[i];
+    }
+    if (usesMinVel)
+        obj.input->min_velocity=std::make_optional(minVel);
+    if (usesMinAccel)
+        obj.input->min_acceleration=std::make_optional(minAcc);
+
     obj.first=true;
 
     int objectHandle=0;
@@ -173,12 +188,7 @@ SIM_DLLEXPORT int ruckigPlugin_vel(int scriptHandle,int dofs,double smallestTime
         obj.input->target_velocity[i]=targetVel[i];
     }
 
-    for (int i=0;i<dofs;i++)
-    { // for now no min/max values
-        obj.input->max_acceleration[i]=maxAccel[i];
-        obj.input->max_jerk[i]=maxJerk[i];
-    }
-
+    bool usesMinAccel=false;
     if (flags>=0)
     { // we don't have default values!
         if ( ((flags&3)==sim_ruckig_phasesync)||((flags&3)==simrml_only_phase_sync) )
@@ -187,7 +197,19 @@ SIM_DLLEXPORT int ruckigPlugin_vel(int scriptHandle,int dofs,double smallestTime
             obj.input->synchronization=Synchronization::Time;
         if ((flags&3)==sim_ruckig_nosync)
             obj.input->synchronization=Synchronization::None;
+        usesMinAccel=((flags&sim_ruckig_minaccel)!=0);
     }
+
+    std::vector<double> minAcc;
+    for (int i=0;i<dofs;i++)
+    {
+        obj.input->max_acceleration[i]=maxAccel[i];
+        if (usesMinAccel)
+            minAcc.push_back(maxAccel[dofs+i]);
+        obj.input->max_jerk[i]=maxJerk[i];
+    }
+    if (usesMinAccel)
+        obj.input->min_acceleration=std::make_optional(minAcc);
 
     obj.first=true;
 
