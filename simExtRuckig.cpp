@@ -236,7 +236,7 @@ SIM_DLLEXPORT int ruckigPlugin_step(int objHandle,double timeStep,double* newPos
         int dofs=it->second.dofs;
         int cnt=int((timeStep/it->second.smallestTimeStep)+0.5);
         double check=fabs(1.0-((double(cnt)*it->second.smallestTimeStep)/timeStep));
-        if (check<0.0001)
+        if (check<0.001)
         { // timeStep should always be a multiple of smallestTimeStep
             if (ruckigPos)
             {
