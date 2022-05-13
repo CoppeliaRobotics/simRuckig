@@ -235,59 +235,65 @@ SIM_DLLEXPORT int ruckigPlugin_step(int objHandle,double timeStep,double* newPos
         bool ruckigPos=(it->second.input->control_interface == ControlInterface::Position);
         int dofs=it->second.dofs;
         int cnt=int((timeStep/it->second.smallestTimeStep)+0.5);
-        if (ruckigPos)
-        {
-            for (int i=0;i<cnt;i++)
+        double check=fabs(1.0-((double(cnt)*it->second.smallestTimeStep)/timeStep));
+        if (check<0.0001)
+        { // timeStep should always be a multiple of smallestTimeStep
+            if (ruckigPos)
             {
-                retVal=it->second.ruckig->update(*it->second.input,*it->second.output);
-
-                for (int j=0;j<dofs;j++)
+                for (int i=0;i<cnt;i++)
                 {
-                    it->second.input->current_position[j]=it->second.output->new_position[j];
-                    it->second.input->current_velocity[j]=it->second.output->new_velocity[j];
-                    it->second.input->current_acceleration[j]=it->second.output->new_acceleration[j];
+                    retVal=it->second.ruckig->update(*it->second.input,*it->second.output);
+
+                    for (int j=0;j<dofs;j++)
+                    {
+                        it->second.input->current_position[j]=it->second.output->new_position[j];
+                        it->second.input->current_velocity[j]=it->second.output->new_velocity[j];
+                        it->second.input->current_acceleration[j]=it->second.output->new_acceleration[j];
+                    }
+
+                    if (retVal!=0)
+                        break;
                 }
 
-                if (retVal!=0)
-                    break;
+                for (int i=0;i<dofs;i++)
+                {
+                    newPos[i]=it->second.output->new_position[i];
+                    newVel[i]=it->second.output->new_velocity[i];
+                    newAccel[i]=it->second.output->new_acceleration[i];
+                }
             }
-
-            for (int i=0;i<dofs;i++)
+            else
             {
-                newPos[i]=it->second.output->new_position[i];
-                newVel[i]=it->second.output->new_velocity[i];
-                newAccel[i]=it->second.output->new_acceleration[i];
+                for (int i=0;i<cnt;i++)
+                {
+                    retVal=it->second.ruckig->update(*it->second.input,*it->second.output);
+
+                    for (int j=0;j<dofs;j++)
+                    {
+                        it->second.input->current_position[j]=it->second.output->new_position[j];
+                        it->second.input->current_velocity[j]=it->second.output->new_velocity[j];
+                        it->second.input->current_acceleration[j]=it->second.output->new_acceleration[j];
+                    }
+
+                    if (retVal!=0)
+                        break;
+                }
+
+                for (int i=0;i<dofs;i++)
+                {
+                    newPos[i]=it->second.output->new_position[i];
+                    newVel[i]=it->second.output->new_velocity[i];
+                    newAccel[i]=it->second.output->new_acceleration[i];
+                }
             }
+            if (it->second.first)
+                it->second.timeLeft=it->second.output->trajectory.get_duration();
+            it->second.timeLeft-=timeStep;
+            syncTime[0]=it->second.timeLeft;
+            it->second.first=false;
         }
         else
-        {
-            for (int i=0;i<cnt;i++)
-            {
-                retVal=it->second.ruckig->update(*it->second.input,*it->second.output);
-
-                for (int j=0;j<dofs;j++)
-                {
-                    it->second.input->current_position[j]=it->second.output->new_position[j];
-                    it->second.input->current_velocity[j]=it->second.output->new_velocity[j];
-                    it->second.input->current_acceleration[j]=it->second.output->new_acceleration[j];
-                }
-
-                if (retVal!=0)
-                    break;
-            }
-
-            for (int i=0;i<dofs;i++)
-            {
-                newPos[i]=it->second.output->new_position[i];
-                newVel[i]=it->second.output->new_velocity[i];
-                newAccel[i]=it->second.output->new_acceleration[i];
-            }
-        }
-        if (it->second.first)
-            it->second.timeLeft=it->second.output->trajectory.get_duration();
-        it->second.timeLeft-=timeStep;
-        syncTime[0]=it->second.timeLeft;
-        it->second.first=false;
+            retVal=-3;
     }
     return(retVal);
 }
