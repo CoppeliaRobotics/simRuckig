@@ -67,7 +67,7 @@ unix:!symbian {
 }
 
 HEADERS += \
-    ../include/simLib.h \
+    ../include/simLib/simLib.h \
     simExtRuckig.h \
     ruckig/include/ruckig/block.hpp \
     ruckig/include/ruckig/brake.hpp \
@@ -81,7 +81,7 @@ HEADERS += \
     ruckig/include/ruckig/velocity.hpp
 
 SOURCES += \
-    ../include/simLib.cpp \
+    ../include/simLib/simLib.cpp \
     simExtRuckig.cpp \
     ruckig/src/brake.cpp \
     ruckig/src/position-step1.cpp \
