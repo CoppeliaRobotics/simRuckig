@@ -100,6 +100,36 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
 
 SIM_DLLEXPORT int ruckigPlugin_pos(int scriptHandle,int dofs,double smallestTimeStep,int flags,const double* currentPos,const double* currentVel,const double* currentAccel,const double* maxVel,const double* maxAccel,const double* maxJerk,const unsigned char* selection,const double* targetPos,const double* targetVel)
 {
+    const int nanErr=-200;
+    for (int i=0;i<dofs;i++)
+    {
+        if (std::isnan(currentPos[i]))
+            return(nanErr);
+        if (std::isnan(currentAccel[i]))
+            return(nanErr);
+        if (std::isnan(targetPos[i]))
+            return(nanErr);
+        if (std::isnan(targetVel[i]))
+            return(nanErr);
+
+        if (std::isnan(maxVel[i]))
+            return(nanErr);
+        if ( (flags>=0)&&((flags&sim_ruckig_minvel)!=0) )
+        { // uses min vel
+            if (std::isnan(maxVel[dofs+i]))
+                return(nanErr);
+        }
+        if (std::isnan(maxAccel[i]))
+            return(nanErr);
+        if ( (flags>=0)&&((flags&sim_ruckig_minaccel)!=0) )
+        { // uses min accel
+            if (std::isnan(maxAccel[dofs+i]))
+                return(nanErr);
+        }
+        if (std::isnan(maxJerk[i]))
+            return(nanErr);
+    }
+
     SObj obj;
     obj.scriptHandle=scriptHandle;
 
@@ -167,6 +197,28 @@ SIM_DLLEXPORT int ruckigPlugin_pos(int scriptHandle,int dofs,double smallestTime
 
 SIM_DLLEXPORT int ruckigPlugin_vel(int scriptHandle,int dofs,double smallestTimeStep,int flags,const double* currentPos,const double* currentVel,const double* currentAccel,const double* maxAccel,const double* maxJerk,const unsigned char* selection,const double* targetVel)
 {
+    const int nanErr=-200;
+    for (int i=0;i<dofs;i++)
+    {
+        if (std::isnan(currentPos[i]))
+            return(nanErr);
+        if (std::isnan(currentVel[i]))
+            return(nanErr);
+        if (std::isnan(currentAccel[i]))
+            return(nanErr);
+        if (std::isnan(targetVel[i]))
+            return(nanErr);
+        if (std::isnan(maxAccel[i]))
+            return(nanErr);
+        if ( (flags>=0)&&((flags&sim_ruckig_minaccel)!=0) )
+        { // uses min accel
+            if (std::isnan(maxAccel[dofs+i]))
+                return(nanErr);
+        }
+        if (std::isnan(maxJerk[i]))
+            return(nanErr);
+    }
+
     SObj obj;
     obj.scriptHandle=scriptHandle;
 
