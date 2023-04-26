@@ -1,11 +1,9 @@
 import os
-import re
 import subprocess
 import sys
 
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
-from distutils.version import LooseVersion
 
 
 with open('README.md', 'r') as readme_file:
@@ -20,18 +18,6 @@ class CMakeExtension(Extension):
 
 class CMakeBuild(build_ext):
     def run(self):
-        try:
-            out = subprocess.check_output(['cmake', '--version'])
-        except OSError as err:
-            raise RuntimeError(
-                'CMake must be installed to build the following extensions: ' +
-                ', '.join(e.name for e in self.extensions)
-            ) from err
-
-        cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)', out.decode()).group(1))
-        if cmake_version < LooseVersion('3.10.0'):
-            raise RuntimeError('CMake >= 3.10.0 is required')
-
         for ext in self.extensions:
             self.build_extension(ext)
 
@@ -54,6 +40,7 @@ class CMakeBuild(build_ext):
             '-DEXAMPLE_VERSION_INFO={}'.format(self.distribution.get_version()),
             '-DCMAKE_BUILD_TYPE=' + build_type,
             '-DBUILD_PYTHON_MODULE=ON',
+            '-DBUILD_ONLINE_CLIENT=ON',
             '-DBUILD_EXAMPLES=OFF',
             '-DBUILD_TESTS=OFF',
             '-DBUILD_SHARED_LIBS=OFF',
@@ -69,13 +56,13 @@ class CMakeBuild(build_ext):
 
 setup(
     name='ruckig',
-    version='0.4.0',
+    version='0.9.2',
     description='Instantaneous Motion Generation for Robots and Machines.',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='Lars Berscheid',
-    author_email='lars.berscheid@kit.edu',
-    url='https://github.com/pantor/ruckig',
+    author_email='lars.berscheid@ruckig.com',
+    url='https://www.ruckig.com',
     packages=find_packages(),
     license='MIT',
     ext_modules=[CMakeExtension('python_ruckig')],

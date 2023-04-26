@@ -1,0 +1,13 @@
+.vscode
+.DS_Store
+
+.mypy_cache
+*.pyc
+__pycache__
+*.egg-info
+
+.env
+build
+dist
+local
+patch-*

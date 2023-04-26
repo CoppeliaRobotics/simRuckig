@@ -1,33 +1,31 @@
 cmake_minimum_required(VERSION 3.10)
 
 
-project(ruckig VERSION 0.4.0 LANGUAGES CXX)
+project(ruckig VERSION 0.9.2 LANGUAGES CXX)
 
 
-list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include(GNUInstallDirs)
 
 
 option(BUILD_EXAMPLES "Build example programs" ON)
-option(BUILD_PYTHON_MODULE "Build python module" OFF)
+option(BUILD_PYTHON_MODULE "Build python module with pybind11" OFF)
+option(BUILD_ONLINE_CLIENT "Build online client to calculate Ruckig Pro trajectories" OFF)
 option(BUILD_TESTS "Build tests" ON)
 option(BUILD_BENCHMARK "Build benchmark" OFF)
 option(BUILD_SHARED_LIBS "Build as shared library" ON)
+option(EXPOSE_INTERNAL "Expose some internal classes and methods" OFF)
 
 if(WIN32 AND BUILD_SHARED_LIBS)
   option(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS "On Windows, export all symbols when building a shared library." ON)
 endif()
 
 
-find_package(Reflexxes QUIET)
-
-
 add_library(ruckig
-  src/brake.cpp
-  src/position-step1.cpp
-  src/position-step2.cpp
-  src/velocity-step1.cpp
-  src/velocity-step2.cpp
+  src/ruckig/brake.cpp
+  src/ruckig/position-step1.cpp
+  src/ruckig/position-step2.cpp
+  src/ruckig/velocity-step1.cpp
+  src/ruckig/velocity-step2.cpp
 )
 add_library(ruckig::ruckig ALIAS ruckig)
 
@@ -41,25 +39,36 @@ target_link_libraries(ruckig PUBLIC)
 
 if(MSVC)
   target_compile_definitions(ruckig PUBLIC _USE_MATH_DEFINES)
-  target_compile_options(ruckig PRIVATE /W4 /WX)
+endif()
 
-else()
-  target_compile_options(ruckig PRIVATE -Werror -Wall -Wextra)
+if(EXPOSE_INTERNAL)
+  target_compile_definitions(ruckig PUBLIC WITH_EXPOSE_INTERNAL)
 endif()
 
 
-if(Reflexxes)
-  set(REFLEXXES_TYPE "ReflexxesTypeII" CACHE STRING "Type of Reflexxes library") # or ReflexxesTypeIV
-  message("Found Reflexxes ${REFLEXXES_TYPE}")
-
-  target_compile_definitions(ruckig PUBLIC WITH_REFLEXXES)
-  target_link_libraries(ruckig PUBLIC Reflexxes::Reflexxes)
+if(BUILD_ONLINE_CLIENT)
+  target_include_directories(ruckig PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  )
+  target_compile_definitions(ruckig PUBLIC WITH_ONLINE_CLIENT WITH_SERIALIZATION)
 endif()
 
 
 if(BUILD_EXAMPLES)
-  foreach(example IN ITEMS 1_position 2_position_offline 5_velocity 6_stop 7_minimum_duration 8_dynamic_dofs)
-    add_executable(example-${example} "examples/${example}.cpp")
+  set(EXAMPLES_LIST 1_position 2_position_offline 5_velocity 6_stop 7_minimum_duration 9_dynamic_dofs)
+
+  if(BUILD_ONLINE_CLIENT)
+    list(APPEND EXAMPLES_LIST 3_waypoints 4_waypoints_online 8_per_section_minimum_duration 10_dynamic_dofs_waypoints)
+  else()
+    list(APPEND EXAMPLES_LIST 12_custom_vector_type 13_custom_vector_type_dynamic_dofs)
+    if(TARGET Eigen3::Eigen)
+      list(APPEND EXAMPLES_LIST 11_eigen_vector_type)
+    endif()
+  endif()
+
+  foreach(example IN LISTS EXAMPLES_LIST)
+    add_executable(example-${example} examples/${example}.cpp)
     target_link_libraries(example-${example} PRIVATE ruckig)
   endforeach()
 endif()
@@ -73,9 +82,12 @@ if(BUILD_PYTHON_MODULE)
     find_package(pybind11 2.6 REQUIRED)
   endif()
 
-  pybind11_add_module(python_ruckig src/python.cpp)
+  pybind11_add_module(python_ruckig src/ruckig/python.cpp)
   target_compile_features(python_ruckig PUBLIC cxx_std_17)
   target_link_libraries(python_ruckig PUBLIC ruckig)
+  if(BUILD_ONLINE_CLIENT)
+    target_compile_definitions(python_ruckig PUBLIC WITH_ONLINE_CLIENT)
+  endif()
 
   set_target_properties(python_ruckig PROPERTIES OUTPUT_NAME ruckig)
   set_target_properties(python_ruckig PROPERTIES ARCHIVE_OUTPUT_NAME python_ruckig)
@@ -128,20 +140,22 @@ install(FILES
 if(BUILD_TESTS)
   enable_testing()
 
-  foreach(test IN ITEMS otg-test)
-    add_executable(${test} "test/${test}.cpp")
-    if(Reflexxes)
-      target_compile_definitions(${test} PUBLIC WITH_REFLEXXES)
-    endif()
-    target_link_libraries(${test} PRIVATE ruckig)
-    add_test(NAME ${test} COMMAND ${test})
-  endforeach()
+  add_executable(test-target test/test-target.cpp test/test-target-known.cpp)
 
-  if(BUILD_BENCHMARK)
-    add_executable(otg-benchmark "test/otg-benchmark.cpp")
-    if(Reflexxes)
-      target_compile_definitions(otg-benchmark PUBLIC WITH_REFLEXXES)
-    endif()
-    target_link_libraries(otg-benchmark PRIVATE ruckig)
+  target_link_libraries(test-target PRIVATE ruckig)
+  target_include_directories(test-target PRIVATE third_party)
+  if(MSVC)
+    target_compile_options(test-target PRIVATE /W4)
+  else()
+    target_compile_options(test-target PRIVATE -Wall -Wextra)
   endif()
+
+  add_test(NAME test-target COMMAND test-target)
+endif()
+
+
+if(BUILD_BENCHMARK)
+  add_executable(benchmark-target test/benchmark-target.cpp)
+
+  target_link_libraries(benchmark-target PRIVATE ruckig)
 endif()

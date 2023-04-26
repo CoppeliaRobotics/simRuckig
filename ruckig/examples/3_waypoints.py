@@ -1,3 +1,5 @@
+# This example shows the usage of intermediate waypoints. It will only work with Ruckig Pro or enabled Online API (e.g. default when installed by pip / PyPI).
+
 from copy import copy
 from pathlib import Path
 from sys import path
@@ -11,9 +13,9 @@ from ruckig import InputParameter, OutputParameter, Result, Ruckig
 
 if __name__ == '__main__':
     # Create instances: the Ruckig OTG as well as input and output parameters
-    otg = Ruckig(3, 0.01)  # DoFs, control cycle rate
+    otg = Ruckig(3, 0.01, 10)  # DoFs, control cycle rate, maximum number of intermediate waypoints for memory allocation
     inp = InputParameter(3)  # DoFs
-    out = OutputParameter(3, 10)  # DoFs, Maximum number of intermediate waypoints for memory allocation
+    out = OutputParameter(3, 10)  # DoFs, maximum number of intermediate waypoints for memory allocation
 
     inp.current_position = [0.2, 0, -0.3]
     inp.current_velocity = [0, 0.2, 0]
@@ -38,12 +40,13 @@ if __name__ == '__main__':
     print('\t'.join(['t'] + [str(i) for i in range(otg.degrees_of_freedom)]))
 
     # Generate the trajectory within the control loop
-    first_output = None
+    first_output, out_list = None, []
     res = Result.Working
     while res == Result.Working:
         res = otg.update(inp, out)
 
         print('\t'.join([f'{out.time:0.3f}'] + [f'{p:0.3f}' for p in out.new_position]))
+        out_list.append(copy(out))
 
         out.pass_to_input(inp)
 
@@ -52,3 +55,9 @@ if __name__ == '__main__':
 
     print(f'Calculation duration: {first_output.calculation_duration:0.1f} [µs]')
     print(f'Trajectory duration: {first_output.trajectory.duration:0.4f} [s]')
+
+    # Plot the trajectory
+    # path.insert(0, str(Path(__file__).parent.absolute().parent / 'test'))
+    # from plotter import Plotter
+
+    # Plotter.plot_trajectory(Path(__file__).parent.absolute() / '3_trajectory.pdf', otg, inp, out_list, plot_jerk=False)

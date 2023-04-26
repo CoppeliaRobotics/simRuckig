@@ -84,8 +84,8 @@ HEADERS += \
 SOURCES += \
     ../include/simLib/simLib.cpp \
     simExtRuckig.cpp \
-    ruckig/src/brake.cpp \
-    ruckig/src/position-step1.cpp \
-    ruckig/src/position-step2.cpp \
-    ruckig/src/velocity-step1.cpp \
-    ruckig/src/velocity-step2.cpp
+    ruckig/src/ruckig/brake.cpp \
+    ruckig/src/ruckig/position-step1.cpp \
+    ruckig/src/ruckig/position-step2.cpp \
+    ruckig/src/ruckig/velocity-step1.cpp \
+    ruckig/src/ruckig/velocity-step2.cpp

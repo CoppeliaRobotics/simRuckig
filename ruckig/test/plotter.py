@@ -1,18 +1,12 @@
-from copy import copy
 from pathlib import Path
-from sys import path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-path.insert(0, str(Path(__file__).parent.absolute().parent / 'build'))
-
-from ruckig import OutputParameter, Result
-
 
 class Plotter:
     @staticmethod
-    def plot_trajectory(filename, otg, inp, out_list, show=False, plot_jerk=True, time_offsets=None):
+    def plot_trajectory(filename, otg, inp, out_list, show=False, plot_jerk=True, time_offsets=None, title=None):
         taxis = np.array(list(map(lambda x: x.time, out_list)))
         if time_offsets:
             taxis += np.array(time_offsets)
@@ -24,6 +18,10 @@ class Plotter:
         dddqaxis[-1, :] = 0.0
 
         plt.figure(figsize=(8.0, 2.0 + 3.0 * inp.degrees_of_freedom), dpi=120)
+        plt.subplot(inp.degrees_of_freedom, 1, 1)
+
+        if title:
+            plt.title(title)
 
         for dof in range(inp.degrees_of_freedom):
             global_max = np.max([qaxis[:, dof], dqaxis[:, dof], ddqaxis[:, dof]])
@@ -42,11 +40,18 @@ class Plotter:
                 plt.plot(taxis, dddqaxis[:, dof], label=f'Jerk {dof+1}')
 
             # Plot sections
-            if hasattr(out_list[0], 'trajectory'):
-                for t in out_list[0].trajectory.intermediate_durations:
-                    plt.axvline(x=t, color='black', linestyle='--', linewidth=1.1)
+            if hasattr(out_list[-1], 'trajectory'):
+                linewidth = 1.0 if len(out_list[-1].trajectory.intermediate_durations) < 20 else 0.25
+                for t in out_list[-1].trajectory.intermediate_durations:
+                    plt.axvline(x=t, color='black', linestyle='--', linewidth=linewidth)
 
             # Plot limit lines
+            if inp.min_position and inp.min_position[dof] > 1.4 * global_min:
+                plt.axhline(y=inp.min_position[dof], color='grey', linestyle='--', linewidth=1.1)
+
+            if inp.max_position and inp.max_position[dof] < 1.4 * global_max:
+                plt.axhline(y=inp.max_position[dof], color='grey', linestyle='--', linewidth=1.1)
+
             if inp.max_velocity[dof] < 1.4 * global_max:
                 plt.axhline(y=inp.max_velocity[dof], color='orange', linestyle='--', linewidth=1.1)
 

@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <vector>
 
+#include <ruckig/utils.hpp>
 
 namespace ruckig {
 
@@ -18,6 +19,7 @@ enum Result {
     ErrorInvalidInput = -100, ///< Error in the input parameter
     ErrorTrajectoryDuration = -101, ///< The trajectory duration exceeds its numerical limits
     ErrorPositionalLimits = -102, ///< The trajectory exceeds the given positional limits (only in Ruckig Pro)
+    // ErrorNoPhaseSynchronization = -103, ///< The trajectory cannot be phase synchronized
     ErrorExecutionTimeCalculation = -110, ///< Error during the extremel time calculation (Step 1)
     ErrorSynchronizationCalculation = -111, ///< Error during the synchronization calculation (Step 2)
 };
@@ -29,9 +31,10 @@ enum class ControlInterface {
 };
 
 enum class Synchronization {
-    Phase, ///< Phase synchronize the DoFs when possible, else fallback to "Time" strategy
     Time, ///< Always synchronize the DoFs to reach the target at the same time (Default)
     TimeIfNecessary, ///< Synchronize only when necessary (e.g. for non-zero target velocity or acceleration)
+    Phase, ///< Phase synchronize the DoFs when this is possible, else fallback to "Time" strategy. Phase synchronization will result a straight-line trajectory
+    // PhaseOnly, ///< Always phase synchronize the DoFs (even when this is not time-optimal), else returns "ErrorNoPhaseSynchronization". Ruckig will then guarantee a straight-line trajectory
     None, ///< Calculate every DoF independently
 };
 
@@ -42,26 +45,38 @@ enum class DurationDiscretization {
 
 
 //! Input type of Ruckig
-template<size_t DOFs>
+template<size_t DOFs, template<class, size_t> class CustomVector = StandardVector>
 class InputParameter {
-    template<class T> using Vector = typename std::conditional<DOFs >= 1, std::array<T, DOFs>, std::vector<T>>::type;
-
-    static std::string join(const Vector<double>& array) {
-        std::ostringstream ss;
-        for (size_t i = 0; i < array.size(); ++i) {
-            if (i) ss << ", ";
-            ss << std::setprecision(16) << array[i];
-        }
-        return ss.str();
-    }
+    template<class T> using Vector = CustomVector<T, DOFs>;
 
     void initialize() {
-        std::fill(current_velocity.begin(), current_velocity.end(), 0.0);
-        std::fill(current_acceleration.begin(), current_acceleration.end(), 0.0);
-        std::fill(target_velocity.begin(), target_velocity.end(), 0.0);
-        std::fill(target_acceleration.begin(), target_acceleration.end(), 0.0);
-        std::fill(enabled.begin(), enabled.end(), true);
+        for (size_t dof = 0; dof < degrees_of_freedom; ++dof) {
+            current_velocity[dof] = 0.0;
+            current_acceleration[dof] = 0.0;
+            target_velocity[dof] = 0.0;
+            target_acceleration[dof] = 0.0;
+            enabled[dof] = true;
+        }
     }
+
+    void resize(size_t dofs) {
+        current_position.resize(dofs);
+        current_velocity.resize(dofs);
+        current_acceleration.resize(dofs);
+        target_position.resize(dofs);
+        target_velocity.resize(dofs);
+        target_acceleration.resize(dofs);
+        max_velocity.resize(dofs);
+        max_acceleration.resize(dofs);
+        max_jerk.resize(dofs);
+        enabled.resize(dofs);
+    }
+
+#if defined WITH_ONLINE_CLIENT
+    void reserve(size_t max_number_of_waypoints) {
+        intermediate_positions.reserve(max_number_of_waypoints);
+    }
+#endif
 
 public:
     size_t degrees_of_freedom;
@@ -83,6 +98,10 @@ public:
     //! Intermediate waypoints (only in Ruckig Pro)
     std::vector<Vector<double>> intermediate_positions;
 
+    // Kinematic constraints for intermediate sections (between waypoints) (only in Ruckig Pro)
+    std::optional<std::vector<Vector<double>>> per_section_max_velocity, per_section_max_acceleration, per_section_max_jerk;
+    std::optional<std::vector<Vector<double>>> per_section_min_velocity, per_section_min_acceleration;
+
     // Positional constraints (only in Ruckig Pro)
     std::optional<Vector<double>> max_position, min_position;
 
@@ -98,6 +117,9 @@ public:
     //! Optional minimum trajectory duration
     std::optional<double> minimum_duration;
 
+    //! Optional minimum trajectory duration for each intermediate sections (only in Ruckig Pro)
+    std::optional<std::vector<double>> per_section_minimum_duration;
+
     //! Optional duration [µs] after which the trajectory calculation is (softly) interrupted (only in Ruckig Pro)
     std::optional<double> interrupt_calculation_duration;
 
@@ -108,67 +130,78 @@ public:
 
     template <size_t D = DOFs, typename std::enable_if<D == 0, int>::type = 0>
     InputParameter(size_t dofs): degrees_of_freedom(dofs) {
-        current_position.resize(dofs);
-        current_velocity.resize(dofs);
-        current_acceleration.resize(dofs);
-        target_position.resize(dofs);
-        target_velocity.resize(dofs);
-        target_acceleration.resize(dofs);
-        max_velocity.resize(dofs);
-        max_acceleration.resize(dofs);
-        max_jerk.resize(dofs);
-        enabled.resize(dofs);
-
+        resize(dofs);
         initialize();
     }
 
-    bool operator!=(const InputParameter<DOFs>& rhs) const {
-        return (
-            current_position != rhs.current_position
-            || current_velocity != rhs.current_velocity
-            || current_acceleration != rhs.current_acceleration
-            || target_position != rhs.target_position
-            || target_velocity != rhs.target_velocity
-            || target_acceleration != rhs.target_acceleration
-            || max_velocity != rhs.max_velocity
-            || max_acceleration != rhs.max_acceleration
-            || max_jerk != rhs.max_jerk
-            || intermediate_positions != rhs.intermediate_positions
-            || max_position != rhs.max_position
-            || min_position != rhs.min_position
-            || enabled != rhs.enabled
-            || minimum_duration != rhs.minimum_duration
-            || min_velocity != rhs.min_velocity
-            || min_acceleration != rhs.min_acceleration
-            || control_interface != rhs.control_interface
-            || synchronization != rhs.synchronization
-            || duration_discretization != rhs.duration_discretization
-            || per_dof_control_interface != rhs.per_dof_control_interface
-            || per_dof_synchronization != rhs.per_dof_synchronization
+#if defined WITH_ONLINE_CLIENT
+    template <size_t D = DOFs, typename std::enable_if<D >= 1, int>::type = 0>
+    InputParameter(size_t max_number_of_waypoints): degrees_of_freedom(DOFs) {
+        reserve(max_number_of_waypoints);
+        initialize();
+    }
+
+    template <size_t D = DOFs, typename std::enable_if<D == 0, int>::type = 0>
+    InputParameter(size_t dofs, size_t max_number_of_waypoints): degrees_of_freedom(dofs) {
+        reserve(max_number_of_waypoints);
+        resize(dofs);
+        initialize();
+    }
+#endif
+
+    bool operator!=(const InputParameter<DOFs, CustomVector>& rhs) const {
+        return !(
+            current_position == rhs.current_position
+            && current_velocity == rhs.current_velocity
+            && current_acceleration == rhs.current_acceleration
+            && target_position == rhs.target_position
+            && target_velocity == rhs.target_velocity
+            && target_acceleration == rhs.target_acceleration
+            && max_velocity == rhs.max_velocity
+            && max_acceleration == rhs.max_acceleration
+            && max_jerk == rhs.max_jerk
+            && intermediate_positions == rhs.intermediate_positions
+            && per_section_max_velocity == rhs.per_section_max_velocity
+            && per_section_max_acceleration == rhs.per_section_max_acceleration
+            && per_section_max_jerk == rhs.per_section_max_jerk
+            && per_section_min_velocity == rhs.per_section_min_velocity
+            && per_section_min_acceleration == rhs.per_section_min_acceleration
+            && max_position == rhs.max_position
+            && min_position == rhs.min_position
+            && enabled == rhs.enabled
+            && minimum_duration == rhs.minimum_duration
+            && per_section_minimum_duration == rhs.per_section_minimum_duration
+            && min_velocity == rhs.min_velocity
+            && min_acceleration == rhs.min_acceleration
+            && control_interface == rhs.control_interface
+            && synchronization == rhs.synchronization
+            && duration_discretization == rhs.duration_discretization
+            && per_dof_control_interface == rhs.per_dof_control_interface
+            && per_dof_synchronization == rhs.per_dof_synchronization
         );
     }
 
     std::string to_string() const {
         std::stringstream ss;
-        ss << "\ninp.current_position = [" << this->join(current_position) << "]\n";
-        ss << "inp.current_velocity = [" << this->join(current_velocity) << "]\n";
-        ss << "inp.current_acceleration = [" << this->join(current_acceleration) << "]\n";
-        ss << "inp.target_position = [" << this->join(target_position) << "]\n";
-        ss << "inp.target_velocity = [" << this->join(target_velocity) << "]\n";
-        ss << "inp.target_acceleration = [" << this->join(target_acceleration) << "]\n";
-        ss << "inp.max_velocity = [" << this->join(max_velocity) << "]\n";
-        ss << "inp.max_acceleration = [" << this->join(max_acceleration) << "]\n";
-        ss << "inp.max_jerk = [" << this->join(max_jerk) << "]\n";
+        ss << "\ninp.current_position = [" << join(current_position, degrees_of_freedom) << "]\n";
+        ss << "inp.current_velocity = [" << join(current_velocity, degrees_of_freedom) << "]\n";
+        ss << "inp.current_acceleration = [" << join(current_acceleration, degrees_of_freedom) << "]\n";
+        ss << "inp.target_position = [" << join(target_position, degrees_of_freedom) << "]\n";
+        ss << "inp.target_velocity = [" << join(target_velocity, degrees_of_freedom) << "]\n";
+        ss << "inp.target_acceleration = [" << join(target_acceleration, degrees_of_freedom) << "]\n";
+        ss << "inp.max_velocity = [" << join(max_velocity, degrees_of_freedom) << "]\n";
+        ss << "inp.max_acceleration = [" << join(max_acceleration, degrees_of_freedom) << "]\n";
+        ss << "inp.max_jerk = [" << join(max_jerk, degrees_of_freedom) << "]\n";
         if (min_velocity) {
-            ss << "inp.min_velocity = [" << this->join(min_velocity.value()) << "]\n";
+            ss << "inp.min_velocity = [" << join(min_velocity.value(), degrees_of_freedom) << "]\n";
         }
         if (min_acceleration) {
-            ss << "inp.min_acceleration = [" << this->join(min_acceleration.value()) << "]\n";
+            ss << "inp.min_acceleration = [" << join(min_acceleration.value(), degrees_of_freedom) << "]\n";
         }
         if (!intermediate_positions.empty()) {
             ss << "inp.intermediate_positions = [\n";
             for (auto p: intermediate_positions) {
-                ss << "    [" << this->join(p) << "],\n";
+                ss << "    [" << join(p, degrees_of_freedom) << "],\n";
             }
             ss << "]\n";
         }

@@ -14,7 +14,8 @@ using namespace ruckig;
     #include <unistd.h>
 #endif
 
-#define PLUGIN_VERSION 1 // 1 since CoppeliaSim V4.3.0
+#define PLUGIN_VERSION 2 // 1 since CoppeliaSim V4.3.0
+                         // 2 since Ruckig V0.9.2
 
 struct SObj
 {
