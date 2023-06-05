@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(simExtRuckig)
+project(simRuckig)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_MACOSX_RPATH 1)
@@ -38,12 +38,12 @@ else()
 endif()
 
 coppeliasim_add_plugin(
-    simExtRuckig
+    simRuckig
     LEGACY
     SOURCES
-    simExtRuckig.cpp
+    simRuckig.cpp
 )
-add_dependencies(simExtRuckig libruckig-build)
-target_include_directories(simExtRuckig PRIVATE ruckig/include)
-target_link_libraries(simExtRuckig ${RUCKIG_LINK_LIBRARY})
+add_dependencies(simRuckig libruckig-build)
+target_include_directories(simRuckig PRIVATE ruckig/include)
+target_link_libraries(simRuckig ${RUCKIG_LINK_LIBRARY})
 coppeliasim_add_library(${RUCKIG_SHARED_LIBRARY})

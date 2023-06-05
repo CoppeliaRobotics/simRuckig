@@ -3,7 +3,7 @@ include(config.pri)
 QT -= core
 QT -= gui
 
-TARGET = simExtRuckig
+TARGET = simRuckig
 TEMPLATE = lib
 
 DEFINES -= UNICODE
@@ -69,7 +69,7 @@ unix:!symbian {
 
 HEADERS += \
     ../include/simLib/simLib.h \
-    simExtRuckig.h \
+    simRuckig.h \
     ruckig/include/ruckig/block.hpp \
     ruckig/include/ruckig/brake.hpp \
     ruckig/include/ruckig/input_parameter.hpp \
@@ -83,7 +83,7 @@ HEADERS += \
 
 SOURCES += \
     ../include/simLib/simLib.cpp \
-    simExtRuckig.cpp \
+    simRuckig.cpp \
     ruckig/src/ruckig/brake.cpp \
     ruckig/src/ruckig/position-step1.cpp \
     ruckig/src/ruckig/position-step2.cpp \

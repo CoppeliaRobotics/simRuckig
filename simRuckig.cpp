@@ -1,4 +1,4 @@
-#include "simExtRuckig.h"
+#include "simRuckig.h"
 #include <simLib/simLib.h>
 #include <iostream>
 #include <vector>
@@ -14,8 +14,9 @@ using namespace ruckig;
     #include <unistd.h>
 #endif
 
-#define PLUGIN_VERSION 2 // 1 since CoppeliaSim V4.3.0
+#define PLUGIN_VERSION 3 // 1 since CoppeliaSim V4.3.0
                          // 2 since Ruckig V0.9.2
+                         // 3 since CoppeliaSim V4.6
 
 struct SObj
 {
@@ -34,7 +35,7 @@ static int nextObjectHandle=0;
 static std::map<int,SObj> allObjects;
 static LIBRARY simLib;
 
-SIM_DLLEXPORT unsigned char simStart(void* reservedPointer,int reservedInt)
+SIM_DLLEXPORT int simInit(const char* pluginName)
 {
 	char curDirAndFile[1024];
 #ifdef _WIN32
@@ -55,34 +56,32 @@ SIM_DLLEXPORT unsigned char simStart(void* reservedPointer,int reservedInt)
 	simLib=loadSimLibrary(temp.c_str());
 	if (simLib==NULL)
 	{
-        printf("simExtRuckig: error: could not find or correctly load the CoppeliaSim library. Cannot start the plugin.\n"); // cannot use simAddLog here.
+        simAddLog(pluginName,sim_verbosity_errors,"could not find or correctly load the CoppeliaSim library. Cannot start the plugin.");
         return(0);
 	}
 	if (getSimProcAddresses(simLib)==0)
 	{
-        printf("simExtRuckig: error: could not find all required functions in the CoppeliaSim library. Cannot start the plugin.\n"); // cannot use simAddLog here.
+        simAddLog(pluginName,sim_verbosity_errors,"could not find all required functions in the CoppeliaSim library. Cannot start the plugin.");
 		unloadSimLibrary(simLib);
         return(0);
 	}
     return(PLUGIN_VERSION);
 }
 
-SIM_DLLEXPORT void simEnd()
+SIM_DLLEXPORT void simCleanup()
 {
     unloadSimLibrary(simLib);
 }
 
-SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,int* replyData)
+SIM_DLLEXPORT void simMsg(int message,int* auxData,void*)
 {
-	void* retVal=NULL;
-
     if (message==sim_message_eventcallback_scriptstatedestroyed)
     {
         std::vector<int> toErase;
         auto it=allObjects.begin();
         while (it!=allObjects.end())
         {
-            if (it->second.scriptHandle==auxiliaryData[0])
+            if (it->second.scriptHandle==auxData[0])
                 toErase.push_back(it->first);
             ++it;
         }
@@ -95,8 +94,6 @@ SIM_DLLEXPORT void* simMessage(int message,int* auxiliaryData,void* customData,i
             allObjects.erase(it);
         }
     }
-
-    return(retVal);
 }
 
 SIM_DLLEXPORT int ruckigPlugin_pos(int scriptHandle,int dofs,double smallestTimeStep,int flags,const double* currentPos,const double* currentVel,const double* currentAccel,const double* maxVel,const double* maxAccel,const double* maxJerk,const unsigned char* selection,const double* targetPos,const double* targetVel)
