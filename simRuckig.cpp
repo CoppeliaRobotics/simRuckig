@@ -7,13 +7,6 @@
 #include <ruckig/ruckig.hpp>
 using namespace ruckig;
 
-#ifdef _WIN32
-    #include <shlwapi.h>
-    #pragma comment(lib, "Shlwapi.lib")
-#else
-    #include <unistd.h>
-#endif
-
 #define PLUGIN_VERSION 3 // 1 since CoppeliaSim V4.3.0
                          // 2 since Ruckig V0.9.2
                          // 3 since CoppeliaSim V4.6
@@ -35,33 +28,17 @@ static int nextObjectHandle=0;
 static std::map<int,SObj> allObjects;
 static LIBRARY simLib;
 
-SIM_DLLEXPORT int simInit(const char* pluginName)
+SIM_DLLEXPORT int simInit(SSimInit* info)
 {
-	char curDirAndFile[1024];
-#ifdef _WIN32
-	GetModuleFileName(NULL,curDirAndFile,1023);
-	PathRemoveFileSpec(curDirAndFile);
-#elif defined (__linux) || defined (__APPLE__)
-	getcwd(curDirAndFile, sizeof(curDirAndFile));
-#endif
-	std::string currentDirAndPath(curDirAndFile);
-	std::string temp(currentDirAndPath);
-#ifdef _WIN32
-	temp+="\\coppeliaSim.dll";
-#elif defined (__linux)
-	temp+="/libcoppeliaSim.so";
-#elif defined (__APPLE__)
-	temp+="/libcoppeliaSim.dylib";
-#endif
-	simLib=loadSimLibrary(temp.c_str());
-	if (simLib==NULL)
+    simLib=loadSimLibrary(info->coppeliaSimLibPath);
+    if (simLib==NULL)
 	{
-        simAddLog(pluginName,sim_verbosity_errors,"could not find or correctly load the CoppeliaSim library. Cannot start the plugin.");
+        simAddLog(info->pluginName,sim_verbosity_errors,"could not find or correctly load the CoppeliaSim library. Cannot start the plugin.");
         return(0);
 	}
 	if (getSimProcAddresses(simLib)==0)
 	{
-        simAddLog(pluginName,sim_verbosity_errors,"could not find all required functions in the CoppeliaSim library. Cannot start the plugin.");
+        simAddLog(info->pluginName,sim_verbosity_errors,"could not find all required functions in the CoppeliaSim library. Cannot start the plugin.");
 		unloadSimLibrary(simLib);
         return(0);
 	}
@@ -73,15 +50,15 @@ SIM_DLLEXPORT void simCleanup()
     unloadSimLibrary(simLib);
 }
 
-SIM_DLLEXPORT void simMsg(int message,int* auxData,void*)
+SIM_DLLEXPORT void simMsg(SSimMsg* info)
 {
-    if (message==sim_message_eventcallback_scriptstatedestroyed)
+    if (info->msgId==sim_message_eventcallback_scriptstatedestroyed)
     {
         std::vector<int> toErase;
         auto it=allObjects.begin();
         while (it!=allObjects.end())
         {
-            if (it->second.scriptHandle==auxData[0])
+            if (it->second.scriptHandle==info->auxData[0])
                 toErase.push_back(it->first);
             ++it;
         }
