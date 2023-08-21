@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.16.3)
 project(simRuckig)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -45,5 +45,5 @@ coppeliasim_add_plugin(
 )
 add_dependencies(simRuckig libruckig-build)
 target_include_directories(simRuckig PRIVATE ruckig/include)
-target_link_libraries(simRuckig ${RUCKIG_LINK_LIBRARY})
+target_link_libraries(simRuckig PRIVATE ${RUCKIG_LINK_LIBRARY})
 coppeliasim_add_library(${RUCKIG_SHARED_LIBRARY})
