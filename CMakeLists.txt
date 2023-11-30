@@ -22,7 +22,7 @@ endif()
 
 include(ExternalProject)
 ExternalProject_Add(libruckig-build
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ruckig
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/ruckig
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/ruckig
     CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF
     INSTALL_COMMAND ""
@@ -42,10 +42,10 @@ coppeliasim_add_plugin(
     simRuckig
     LEGACY
     SOURCES
-    simRuckig.cpp
+    sourceCode/simRuckig.cpp
 )
 add_dependencies(simRuckig libruckig-build)
-target_include_directories(simRuckig PRIVATE ruckig/include)
+target_include_directories(simRuckig PRIVATE external/ruckig/include)
 target_link_libraries(simRuckig PRIVATE ${RUCKIG_LINK_LIBRARY})
 coppeliasim_add_library(${RUCKIG_SHARED_LIBRARY})
-coppeliasim_add_lua(simRuckig.lua)
+coppeliasim_add_lua(lua/simRuckig.lua)
