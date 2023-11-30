@@ -69,23 +69,23 @@ unix:!symbian {
 
 HEADERS += \
     ../include/simLib/simLib.h \
-    simRuckig.h \
-    ruckig/include/ruckig/block.hpp \
-    ruckig/include/ruckig/brake.hpp \
-    ruckig/include/ruckig/input_parameter.hpp \
-    ruckig/include/ruckig/output_parameter.hpp \
-    ruckig/include/ruckig/position.hpp \
-    ruckig/include/ruckig/profile.hpp \
-    ruckig/include/ruckig/roots.hpp \
-    ruckig/include/ruckig/ruckig.hpp \
-    ruckig/include/ruckig/trajectory.hpp \
-    ruckig/include/ruckig/velocity.hpp
+    sourceCode/simRuckig.h \
+    external/ruckig/include/ruckig/block.hpp \
+    external/ruckig/include/ruckig/brake.hpp \
+    external/ruckig/include/ruckig/input_parameter.hpp \
+    external/ruckig/include/ruckig/output_parameter.hpp \
+    external/ruckig/include/ruckig/position.hpp \
+    external/ruckig/include/ruckig/profile.hpp \
+    external/ruckig/include/ruckig/roots.hpp \
+    external/ruckig/include/ruckig/ruckig.hpp \
+    external/ruckig/include/ruckig/trajectory.hpp \
+    external/ruckig/include/ruckig/velocity.hpp
 
 SOURCES += \
     ../include/simLib/simLib.cpp \
-    simRuckig.cpp \
-    ruckig/src/ruckig/brake.cpp \
-    ruckig/src/ruckig/position-step1.cpp \
-    ruckig/src/ruckig/position-step2.cpp \
-    ruckig/src/ruckig/velocity-step1.cpp \
-    ruckig/src/ruckig/velocity-step2.cpp
+    sourceCode/simRuckig.cpp \
+    external/ruckig/src/ruckig/brake.cpp \
+    external/ruckig/src/ruckig/position-step1.cpp \
+    external/ruckig/src/ruckig/position-step2.cpp \
+    external/ruckig/src/ruckig/velocity-step1.cpp \
+    external/ruckig/src/ruckig/velocity-step2.cpp
