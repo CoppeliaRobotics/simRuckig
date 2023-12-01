@@ -9,7 +9,8 @@ TEMPLATE = lib
 DEFINES -= UNICODE
 DEFINES += QT_COMPIL
 CONFIG += shared plugin
-INCLUDEPATH += "ruckig/include"
+INCLUDEPATH += "external"
+INCLUDEPATH += "external/ruckig/include"
 INCLUDEPATH += "../include"
 
 *-msvc* {
