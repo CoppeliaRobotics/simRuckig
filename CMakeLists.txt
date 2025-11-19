@@ -14,7 +14,7 @@ if(NOT COPPELIASIM_INCLUDE_DIR)
     endif()
 endif()
 list(APPEND CMAKE_MODULE_PATH ${COPPELIASIM_INCLUDE_DIR}/cmake)
-find_package(CoppeliaSim 4.5.1.7 REQUIRED)
+find_package(CoppeliaSim 4.5.1.7 REQUIRED COMPONENTS simLib-1)
 
 if(WIN32)
     add_compile_definitions(_USE_MATH_DEFINES)
